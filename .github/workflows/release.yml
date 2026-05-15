@@ -1,0 +1,247 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Extract the version number from the tag (strips the leading 'v')
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  # ── Android (all 4 ABIs) ───────────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross.git
+
+      - name: Build Android arm64-v8a
+        run: cross build --target aarch64-linux-android --release
+        working-directory: rust
+
+      - name: Build Android armeabi-v7a
+        run: cross build --target armv7-linux-androideabi --release
+        working-directory: rust
+
+      - name: Build Android x86_64
+        run: cross build --target x86_64-linux-android --release
+        working-directory: rust
+
+      - name: Build Android x86
+        run: cross build --target i686-linux-android --release
+        working-directory: rust
+
+      - name: Package
+        run: |
+          mkdir -p artifacts
+          cp rust/target/aarch64-linux-android/release/librust_lib_typst_flutter.so \
+             artifacts/librust_lib_typst_flutter_android_arm64.so
+          cp rust/target/armv7-linux-androideabi/release/librust_lib_typst_flutter.so \
+             artifacts/librust_lib_typst_flutter_android_armv7.so
+          cp rust/target/x86_64-linux-android/release/librust_lib_typst_flutter.so \
+             artifacts/librust_lib_typst_flutter_android_x64.so
+          cp rust/target/i686-linux-android/release/librust_lib_typst_flutter.so \
+             artifacts/librust_lib_typst_flutter_android_x86.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-libs
+          path: artifacts/
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── iOS (fat static lib: device arm64 + sim arm64 + sim x86_64) ──────────
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add iOS targets
+        run: |
+          rustup target add aarch64-apple-ios
+          rustup target add aarch64-apple-ios-sim
+          rustup target add x86_64-apple-ios
+
+      - name: Build iOS device (arm64)
+        run: cargo build --target aarch64-apple-ios --release
+        working-directory: rust
+
+      - name: Build iOS simulator (arm64)
+        run: cargo build --target aarch64-apple-ios-sim --release
+        working-directory: rust
+
+      - name: Build iOS simulator (x86_64)
+        run: cargo build --target x86_64-apple-ios --release
+        working-directory: rust
+
+      - name: Create fat static library
+        run: |
+          # Combine all three slices into one fat .a using lipo.
+          # This single file supports physical devices AND both simulator archs.
+          lipo -create \
+            rust/target/aarch64-apple-ios/release/librust_lib_typst_flutter.a \
+            rust/target/aarch64-apple-ios-sim/release/librust_lib_typst_flutter.a \
+            rust/target/x86_64-apple-ios/release/librust_lib_typst_flutter.a \
+            -output librust_lib_typst_flutter_ios.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-lib
+          path: librust_lib_typst_flutter_ios.a
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: librust_lib_typst_flutter_ios.a
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Linux x86_64 ──────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Linux x86_64
+        run: cargo build --target x86_64-unknown-linux-gnu --release
+        working-directory: rust
+
+      - name: Package
+        run: |
+          mkdir -p artifacts
+          cp rust/target/x86_64-unknown-linux-gnu/release/librust_lib_typst_flutter.so \
+             artifacts/librust_lib_typst_flutter_linux_x64.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-lib
+          path: artifacts/
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Windows x86_64 ────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Windows x86_64
+        run: cargo build --target x86_64-pc-windows-msvc --release
+        working-directory: rust
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item rust\target\x86_64-pc-windows-msvc\release\rust_lib_typst_flutter.dll `
+                    artifacts\rust_lib_typst_flutter_windows_x64.dll
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-lib
+          path: artifacts/
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── macOS universal (arm64 + x86_64) ────────────────────────────────────
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add macOS targets
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      - name: Build macOS x86_64
+        run: cargo build --target x86_64-apple-darwin --release
+        working-directory: rust
+
+      - name: Build macOS arm64
+        run: cargo build --target aarch64-apple-darwin --release
+        working-directory: rust
+
+      - name: Create universal dylib
+        run: |
+          lipo -create \
+            rust/target/x86_64-apple-darwin/release/librust_lib_typst_flutter.dylib \
+            rust/target/aarch64-apple-darwin/release/librust_lib_typst_flutter.dylib \
+            -output librust_lib_typst_flutter_macos_universal.dylib
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-lib
+          path: librust_lib_typst_flutter_macos_universal.dylib
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: librust_lib_typst_flutter_macos_universal.dylib
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── SHA-256 checksums ─────────────────────────────────────────────────────
+  generate-checksums:
+    needs: [build-android, build-ios, build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd all-artifacts
+          sha256sum * > ../SHA256SUMS
+          cat ../SHA256SUMS
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── pub.dev publish ───────────────────────────────────────────────────────
+  publish-dart:
+    needs: [generate-checksums]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Validate package (dry run)
+        run: dart pub publish --dry-run
+
+      - name: Publish to pub.dev
+        run: dart pub publish --force

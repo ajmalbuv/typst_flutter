@@ -1,0 +1,20 @@
+# Pub ignores native binary artifacts since they are downloaded by the setup script
+# or built locally by Cargokit, and are way over the pub.dev 100MB limit.
+
+# Ignore any platform-specific built libraries
+android/src/main/jniLibs/
+ios/Frameworks/
+macos/Frameworks/
+windows/typst_flutter.dll
+linux/libtypst_flutter.so
+
+# Ensure the prebuilt download cache is not published
+.typst_flutter_prebuilt/
+
+# Cargo build targets (just in case they aren't gitignored)
+rust/target/
+rust_builder/target/
+
+# Example app and tests are generally fine to publish, but build artifacts inside them are not.
+example/build/
+example/.dart_tool/

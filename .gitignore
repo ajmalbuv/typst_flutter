@@ -1,0 +1,64 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code — leave uncommented if you want to share launch configs
+#.vscode/
+
+# ── Flutter / Dart / Pub ──────────────────────────────────────────────────────
+# Libraries must not commit pubspec.lock (only apps do).
+# https://dart.dev/guides/libraries/private-files#pubspeclock
+/pubspec.lock
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/build/
+/coverage/
+
+# ── Rust ──────────────────────────────────────────────────────────────────────
+# Cargo build output
+rust/target/
+rust_builder/target/
+
+# Cargo.lock should NOT be committed for library crates.
+# https://doc.rust-lang.org/cargo/faq.html#why-do-binaries-have-cargolock-in-version-control-but-not-libraries
+rust/Cargo.lock
+
+# Local Cargo overrides
+rust/.cargo/config.toml
+
+# ── Native binaries ───────────────────────────────────────────────────────────
+# Pre-built binaries downloaded by `dart run typst_flutter:setup`
+.typst_flutter_prebuilt/
+
+# Platform-specific locally-built output directories
+android/src/main/jniLibs/
+ios/Frameworks/
+linux/libs/
+windows/libs/
+macos/libs/
+
+# ── Example app ───────────────────────────────────────────────────────────────
+# The example/ is a standalone Flutter *app*, so its pubspec.lock IS committed.
+# (No rule needed — the /pubspec.lock rule above only matches the package root.)
+example/build/
+example/.dart_tool/
+example/.flutter-plugins
+example/.flutter-plugins-dependencies
