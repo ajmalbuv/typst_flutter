@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 # Extract the version number from the tag (strips the leading 'v')
 env:
@@ -89,24 +89,31 @@ jobs:
         run: cargo build --target x86_64-apple-ios --release
         working-directory: rust
 
-      - name: Create fat static library
+      - name: Create iOS XCFramework
         run: |
-          # Combine all three slices into one fat .a using lipo.
-          # This single file supports physical devices AND both simulator archs.
+          # Combine both simulator architectures into a single fat library
           lipo -create \
-            rust/target/aarch64-apple-ios/release/libtypst_flutter.a \
             rust/target/aarch64-apple-ios-sim/release/libtypst_flutter.a \
             rust/target/x86_64-apple-ios/release/libtypst_flutter.a \
-            -output libtypst_flutter_ios.a
+            -output rust/target/libtypst_flutter_sim_fat.a
+
+          # Create the xcframework from the device arm64 and the simulator fat lib
+          xcodebuild -create-xcframework \
+            -library rust/target/aarch64-apple-ios/release/libtypst_flutter.a \
+            -library rust/target/libtypst_flutter_sim_fat.a \
+            -output typst_flutter.xcframework
+
+      - name: Zip XCFramework
+        run: zip -r libtypst_flutter_ios.xcframework.zip typst_flutter.xcframework
 
       - uses: actions/upload-artifact@v4
         with:
           name: ios-lib
-          path: libtypst_flutter_ios.a
+          path: libtypst_flutter_ios.xcframework.zip
 
       - uses: softprops/action-gh-release@v1
         with:
-          files: libtypst_flutter_ios.a
+          files: libtypst_flutter_ios.xcframework.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -240,7 +247,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
 
       - name: Install dependencies
         run: flutter pub get

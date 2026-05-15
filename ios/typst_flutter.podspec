@@ -24,22 +24,20 @@ Pod::Spec.new do |s|
 
   # ── Pre-built binary detection ──────────────────────────────────────────────
   #
-  # When `dart run typst_flutter:setup` has been run, the fat static library
-  # is at {package_root}/.typst_flutter_prebuilt/ios/libtypst_flutter.a.
+  # When `dart run typst_flutter:setup` has been run, the XCFramework
+  # is at {package_root}/.typst_flutter_prebuilt/ios/typst_flutter.xcframework.
   # __dir__ is the directory containing this podspec (the ios/ directory),
   # so we navigate one level up to the package root.
 
-  prebuilt_lib = File.join(
-    __dir__, '../.typst_flutter_prebuilt/ios/libtypst_flutter.a'
+  prebuilt_xcframework = File.join(
+    __dir__, '../.typst_flutter_prebuilt/ios/typst_flutter.xcframework'
   )
 
-  if File.exist?(prebuilt_lib)
+  if File.exist?(prebuilt_xcframework)
     # ── Pre-built path ────────────────────────────────────────────────────────
-    s.vendored_libraries = prebuilt_lib
+    s.vendored_frameworks = prebuilt_xcframework
     s.pod_target_xcconfig = {
-      'DEFINES_MODULE'                       => 'YES',
-      'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-      'OTHER_LDFLAGS' => "-force_load #{prebuilt_lib}",
+      'DEFINES_MODULE' => 'YES',
     }
   else
     # ── Cargokit fallback ─────────────────────────────────────────────────────

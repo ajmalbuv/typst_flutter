@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -110,10 +111,10 @@ List<_Artifact> _allArtifacts() => [
     filename: 'libtypst_flutter_android_x86.so',
     destination: 'android/x86/libtypst_flutter.so',
   ),
-  // iOS — fat static lib (device + simulator)
+  // iOS — XCFramework zip (device + simulator)
   const _Artifact(
-    filename: 'libtypst_flutter_ios.a',
-    destination: 'ios/libtypst_flutter.a',
+    filename: 'libtypst_flutter_ios.xcframework.zip',
+    destination: 'ios/',
   ),
   // Desktop
   const _Artifact(
@@ -248,8 +249,13 @@ class _Setup {
       }
     }
 
-    // Write file
-    File(destPath).writeAsBytesSync(bytes);
+    // Write/extract file
+    if (artifact.filename.endsWith('.zip')) {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      await extractArchiveToDisk(archive, destPath);
+    } else {
+      File(destPath).writeAsBytesSync(bytes);
+    }
 
     final kb = (bytes.length / 1024).toStringAsFixed(1);
     print('  ✓ ${artifact.destination} ($kb KB)');
