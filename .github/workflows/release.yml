@@ -9,6 +9,9 @@ on:
 env:
   VERSION: ${{ github.ref_name }}
 
+permissions:
+  contents: write
+
 jobs:
   # ── Android (all 4 ABIs) ───────────────────────────────────────────────────
   build-android:
