@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use typst::diag::{FileError, SourceResult};
+use typst::diag::FileError;
 use typst::foundations::{Bytes, Datetime};
 use typst::layout::PagedDocument;
-use typst::syntax::{FileId, Source, SourceId};
+use typst::syntax::{FileId, Source};
 use typst::text::{Font, FontBook};
-use typst::Library;
+use typst::{Library, LibraryExt};
+use typst::utils::LazyHash;
 
 // ── Public types exposed through the FRB bridge ─────────────────────────────
 
@@ -55,7 +55,7 @@ pub fn compile_pdf(
 ) -> Result<TypstResult, String> {
     let world = SimpleWorld::new(markup, fonts, files);
     let document: PagedDocument =
-        typst::compile(&world).map_err(|errs| format_errors(&errs))?;
+        typst::compile(&world).output.map_err(|errs| format_errors(&errs))?;
     let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
         .map_err(|e| format!("{e:?}"))?;
 
@@ -86,7 +86,7 @@ pub fn render_page(
 ) -> Result<RenderResult, String> {
     let world = SimpleWorld::new(markup, fonts, files);
     let document: PagedDocument =
-        typst::compile(&world).map_err(|errs| format_errors(&errs))?;
+        typst::compile(&world).output.map_err(|errs| format_errors(&errs))?;
 
     if page_index >= document.pages.len() {
         return Err(format!(
@@ -120,8 +120,8 @@ pub fn get_typst_version() -> String {
 // ── SimpleWorld — in-memory Typst World implementation ───────────────────────
 
 struct SimpleWorld {
-    library: Arc<Library>,
-    book: Arc<FontBook>,
+    library: LazyHash<Library>,
+    book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     source: Source,
     /// Virtual file system: normalised path string → file bytes.
@@ -132,7 +132,7 @@ impl SimpleWorld {
     fn new(markup: String, font_data: Vec<Vec<u8>>, virtual_files: Vec<VirtualFile>) -> Self {
         let mut fonts = Vec::new();
         for data in font_data {
-            let bytes = Bytes::from(data);
+            let bytes = Bytes::new(data);
             fonts.extend(Font::iter(bytes));
         }
 
@@ -142,34 +142,34 @@ impl SimpleWorld {
             .into_iter()
             .map(|vf| {
                 let normalised = vf.path.replace('\\', "/");
-                (normalised, Bytes::from(vf.bytes))
+                (normalised, Bytes::new(vf.bytes))
             })
             .collect();
 
         Self {
-            library: Arc::new(Library::default()),
-            book: Arc::new(FontBook::from_fonts(&fonts)),
+            library: LazyHash::new(Library::builder().build()),
+            book: LazyHash::new(FontBook::from_fonts(&fonts)),
             fonts,
-            source: Source::new(SourceId::from_u16(0), "main.typ".into(), markup),
+            source: Source::new(FileId::new(None, typst::syntax::VirtualPath::new("main.typ")), markup),
             files,
         }
     }
 }
 
 impl typst::World for SimpleWorld {
-    fn library(&self) -> &Arc<Library> {
+    fn library(&self) -> &LazyHash<Library> {
         &self.library
     }
 
-    fn book(&self) -> &Arc<FontBook> {
+    fn book(&self) -> &LazyHash<FontBook> {
         &self.book
     }
 
-    fn main(&self) -> Source {
-        self.source.clone()
+    fn main(&self) -> FileId {
+        self.source.id()
     }
 
-    fn source(&self, _id: SourceId) -> SourceResult<Source> {
+    fn source(&self, _id: FileId) -> Result<Source, FileError> {
         Ok(self.source.clone())
     }
 
@@ -177,16 +177,16 @@ impl typst::World for SimpleWorld {
         self.fonts.get(index).cloned()
     }
 
-    fn file(&self, id: FileId) -> SourceResult<Bytes> {
+    fn file(&self, id: FileId) -> Result<Bytes, FileError> {
         // Resolve the virtual path to a normalised forward-slash string and
         // look it up in our in-memory virtual file system.
         let vpath = id.vpath().as_rootless_path();
         let key = vpath.to_string_lossy().replace('\\', "/");
 
         self.files
-            .get(key.as_ref())
+            .get(&key)
             .cloned()
-            .ok_or_else(|| FileError::NotFound(vpath.into()).into())
+            .ok_or_else(|| FileError::NotFound(vpath.into()))
     }
 
     fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
@@ -200,7 +200,7 @@ impl typst::World for SimpleWorld {
 /// Format a list of Typst diagnostic errors into a readable string.
 fn format_errors(errs: &[typst::diag::SourceDiagnostic]) -> String {
     errs.iter()
-        .map(|e| format!("[{}] {}", e.severity, e.message))
+        .map(|e| format!("[{:?}] {}", e.severity, e.message))
         .collect::<Vec<_>>()
         .join("\n")
 }

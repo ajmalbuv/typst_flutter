@@ -1,5 +1,10 @@
 # typst_flutter
 
+[![Pub Version](https://img.shields.io/pub/v/typst_flutter)](https://pub.dev/packages/typst_flutter)
+[![Pub Points](https://img.shields.io/pub/points/typst_flutter)](https://pub.dev/packages/typst_flutter)
+[![style: very good analysis](https://img.shields.io/badge/style-very_good_analysis-B22C89.svg)](https://pub.dev/packages/very_good_analysis)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 Embed the **Typst typesetting compiler** natively into your Flutter apps via Rust FFI.
 
 Compile Typst markup to high-quality PDF documents or rendered images on Android, iOS, macOS, Windows, and Linux. No WASM overhead, no WebView, no server required.
@@ -75,7 +80,19 @@ class MyEditor extends StatelessWidget {
     );
   }
 }
-```
+
+## Testing
+
+Because this package relies on native Rust libraries via FFI, tests must be run as integration tests against a host platform.
+
+1. Ensure you have downloaded the native binaries for your host machine:
+   ```bash
+   dart run typst_flutter:setup
+   ```
+2. Run the integration tests using the flutter test command:
+   ```bash
+   flutter test integration_test/simple_test.dart
+   ```
 
 ## Author
 
