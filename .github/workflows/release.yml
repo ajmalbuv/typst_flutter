@@ -40,14 +40,14 @@ jobs:
       - name: Package
         run: |
           mkdir -p artifacts
-          cp rust/target/aarch64-linux-android/release/librust_lib_typst_flutter.so \
-             artifacts/librust_lib_typst_flutter_android_arm64.so
-          cp rust/target/armv7-linux-androideabi/release/librust_lib_typst_flutter.so \
-             artifacts/librust_lib_typst_flutter_android_armv7.so
-          cp rust/target/x86_64-linux-android/release/librust_lib_typst_flutter.so \
-             artifacts/librust_lib_typst_flutter_android_x64.so
-          cp rust/target/i686-linux-android/release/librust_lib_typst_flutter.so \
-             artifacts/librust_lib_typst_flutter_android_x86.so
+          cp rust/target/aarch64-linux-android/release/libtypst_flutter.so \
+             artifacts/libtypst_flutter_android_arm64.so
+          cp rust/target/armv7-linux-androideabi/release/libtypst_flutter.so \
+             artifacts/libtypst_flutter_android_armv7.so
+          cp rust/target/x86_64-linux-android/release/libtypst_flutter.so \
+             artifacts/libtypst_flutter_android_x64.so
+          cp rust/target/i686-linux-android/release/libtypst_flutter.so \
+             artifacts/libtypst_flutter_android_x86.so
 
       - uses: actions/upload-artifact@v4
         with:
@@ -91,19 +91,19 @@ jobs:
           # Combine all three slices into one fat .a using lipo.
           # This single file supports physical devices AND both simulator archs.
           lipo -create \
-            rust/target/aarch64-apple-ios/release/librust_lib_typst_flutter.a \
-            rust/target/aarch64-apple-ios-sim/release/librust_lib_typst_flutter.a \
-            rust/target/x86_64-apple-ios/release/librust_lib_typst_flutter.a \
-            -output librust_lib_typst_flutter_ios.a
+            rust/target/aarch64-apple-ios/release/libtypst_flutter.a \
+            rust/target/aarch64-apple-ios-sim/release/libtypst_flutter.a \
+            rust/target/x86_64-apple-ios/release/libtypst_flutter.a \
+            -output libtypst_flutter_ios.a
 
       - uses: actions/upload-artifact@v4
         with:
           name: ios-lib
-          path: librust_lib_typst_flutter_ios.a
+          path: libtypst_flutter_ios.a
 
       - uses: softprops/action-gh-release@v1
         with:
-          files: librust_lib_typst_flutter_ios.a
+          files: libtypst_flutter_ios.a
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -122,8 +122,8 @@ jobs:
       - name: Package
         run: |
           mkdir -p artifacts
-          cp rust/target/x86_64-unknown-linux-gnu/release/librust_lib_typst_flutter.so \
-             artifacts/librust_lib_typst_flutter_linux_x64.so
+          cp rust/target/x86_64-unknown-linux-gnu/release/libtypst_flutter.so \
+             artifacts/libtypst_flutter_linux_x64.so
 
       - uses: actions/upload-artifact@v4
         with:
@@ -151,8 +151,8 @@ jobs:
       - name: Package
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Copy-Item rust\target\x86_64-pc-windows-msvc\release\rust_lib_typst_flutter.dll `
-                    artifacts\rust_lib_typst_flutter_windows_x64.dll
+          Copy-Item rust\target\x86_64-pc-windows-msvc\release\typst_flutter.dll `
+                    artifacts\typst_flutter_windows_x64.dll
 
       - uses: actions/upload-artifact@v4
         with:
@@ -189,18 +189,18 @@ jobs:
       - name: Create universal dylib
         run: |
           lipo -create \
-            rust/target/x86_64-apple-darwin/release/librust_lib_typst_flutter.dylib \
-            rust/target/aarch64-apple-darwin/release/librust_lib_typst_flutter.dylib \
-            -output librust_lib_typst_flutter_macos_universal.dylib
+            rust/target/x86_64-apple-darwin/release/libtypst_flutter.dylib \
+            rust/target/aarch64-apple-darwin/release/libtypst_flutter.dylib \
+            -output libtypst_flutter_macos_universal.dylib
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-lib
-          path: librust_lib_typst_flutter_macos_universal.dylib
+          path: libtypst_flutter_macos_universal.dylib
 
       - uses: softprops/action-gh-release@v1
         with:
-          files: librust_lib_typst_flutter_macos_universal.dylib
+          files: libtypst_flutter_macos_universal.dylib
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -235,13 +235,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
 
       - name: Install dependencies
-        run: dart pub get
+        run: flutter pub get
 
       - name: Validate package (dry run)
-        run: dart pub publish --dry-run
+        run: flutter pub publish --dry-run
 
       - name: Publish to pub.dev
-        run: dart pub publish --force
+        run: flutter pub publish --force

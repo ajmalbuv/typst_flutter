@@ -30,7 +30,7 @@ Pod::Spec.new do |s|
   # so we navigate one level up to the package root.
 
   prebuilt_lib = File.join(
-    __dir__, '../.typst_flutter_prebuilt/ios/librust_lib_typst_flutter.a'
+    __dir__, '../.typst_flutter_prebuilt/ios/libtypst_flutter.a'
   )
 
   if File.exist?(prebuilt_lib)

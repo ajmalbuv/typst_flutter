@@ -95,38 +95,38 @@ class _Artifact {
 List<_Artifact> _allArtifacts() => [
   // Android — all 4 ABIs
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_android_arm64.so',
-    destination: 'android/arm64-v8a/librust_lib_typst_flutter.so',
+    filename: 'libtypst_flutter_android_arm64.so',
+    destination: 'android/arm64-v8a/libtypst_flutter.so',
   ),
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_android_armv7.so',
-    destination: 'android/armeabi-v7a/librust_lib_typst_flutter.so',
+    filename: 'libtypst_flutter_android_armv7.so',
+    destination: 'android/armeabi-v7a/libtypst_flutter.so',
   ),
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_android_x64.so',
-    destination: 'android/x86_64/librust_lib_typst_flutter.so',
+    filename: 'libtypst_flutter_android_x64.so',
+    destination: 'android/x86_64/libtypst_flutter.so',
   ),
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_android_x86.so',
-    destination: 'android/x86/librust_lib_typst_flutter.so',
+    filename: 'libtypst_flutter_android_x86.so',
+    destination: 'android/x86/libtypst_flutter.so',
   ),
   // iOS — fat static lib (device + simulator)
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_ios.a',
-    destination: 'ios/librust_lib_typst_flutter.a',
+    filename: 'libtypst_flutter_ios.a',
+    destination: 'ios/libtypst_flutter.a',
   ),
   // Desktop
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_linux_x64.so',
-    destination: 'linux/librust_lib_typst_flutter.so',
+    filename: 'libtypst_flutter_linux_x64.so',
+    destination: 'linux/libtypst_flutter.so',
   ),
   const _Artifact(
-    filename: 'rust_lib_typst_flutter_windows_x64.dll',
-    destination: 'windows/rust_lib_typst_flutter.dll',
+    filename: 'typst_flutter_windows_x64.dll',
+    destination: 'windows/typst_flutter.dll',
   ),
   const _Artifact(
-    filename: 'librust_lib_typst_flutter_macos_universal.dylib',
-    destination: 'macos/librust_lib_typst_flutter.dylib',
+    filename: 'libtypst_flutter_macos_universal.dylib',
+    destination: 'macos/libtypst_flutter.dylib',
   ),
 ];
 
