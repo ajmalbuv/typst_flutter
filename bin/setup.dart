@@ -1,8 +1,9 @@
 // Print statements are intentional in this CLI setup script.
-// ignore_for_file: avoid_print
+// ignore_for_file: lines_longer_than_80_chars, avoid_print
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
@@ -142,7 +143,7 @@ class _Setup {
   late final Map<String, String> _sha256sums;
 
   Future<void> run() async {
-    _packageRoot = _findPackageRoot();
+    _packageRoot = await _findPackageRoot();
     _version = _opts.version ?? _readVersion();
 
     print('╔══════════════════════════════════════════════════╗');
@@ -286,24 +287,23 @@ class _Setup {
     return result;
   }
 
-  /// Walks up from the script location to find the directory that contains
-  /// pubspec.yaml — that is the package root.
-  String _findPackageRoot() {
-    var dir = Directory(Platform.script.toFilePath()).parent;
-    while (true) {
-      final pubspec = File(p.join(dir.path, 'pubspec.yaml'));
-      if (pubspec.existsSync()) {
-        return dir.path;
-      }
-      final parent = dir.parent;
-      if (parent.path == dir.path) {
-        throw StateError(
-          'Could not find pubspec.yaml. '
-          'Run this script from within the typst_flutter package directory.',
-        );
-      }
-      dir = parent;
+  /// Finds the typst_flutter package root by resolving its package URI.
+  Future<String> _findPackageRoot() async {
+    final uri = await Isolate.resolvePackageUri(
+      Uri.parse('package:typst_flutter/typst_flutter.dart'),
+    );
+
+    if (uri == null) {
+      throw StateError(
+        'Could not resolve package:typst_flutter. '
+        'Make sure the package is in your pubspec.yaml and you have run flutter pub get.',
+      );
     }
+
+    // uri is usually file:///path/to/typst_flutter/lib/typst_flutter.dart
+    // We want the directory containing pubspec.yaml, which is one level up from lib/
+    final libDir = p.dirname(uri.toFilePath());
+    return p.dirname(libDir);
   }
 
   /// Reads the package version from pubspec.yaml.
