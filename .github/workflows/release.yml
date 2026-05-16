@@ -254,6 +254,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Setup pub credentials
+        run: |
+          mkdir -p ~/.config/dart
+          echo '${{ secrets.PUB_CREDENTIALS }}' > ~/.config/dart/pub-credentials.json
+
       - name: Validate package (dry run)
         run: flutter pub publish --dry-run
 
