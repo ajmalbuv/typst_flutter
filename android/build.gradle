@@ -36,26 +36,16 @@ apply plugin: 'com.android.library'
 
 // ── Pre-built binary detection ────────────────────────────────────────────────
 //
-// rootProject.projectDir is the Flutter app's android/ directory.
-// Navigating up one level reaches the Flutter app root, then up one more
-// reaches the package root where .typst_flutter_prebuilt/ lives.
+// We look for pre-built binaries in the `.typst_flutter_prebuilt/android` folder.
+// This folder is created by running `dart run typst_flutter:setup`.
 
-def packageRoot = rootProject.projectDir.parentFile  // Flutter app root
-def prebuiltDir = new File(packageRoot,
-    ".pub-cache/hosted/pub.dev/typst_flutter-1.0.0/.typst_flutter_prebuilt/android")
-
-// Also check local development path (when used as a path dep or during CI)
-if (!prebuiltDir.exists()) {
-    // Walk up from android/ to find the plugin's own .typst_flutter_prebuilt/
-    def pluginAndroidDir = project.projectDir  // <plugin>/android/
-    def pluginRoot = pluginAndroidDir.parentFile  // <plugin>/
-    prebuiltDir = new File(pluginRoot, ".typst_flutter_prebuilt/android")
-}
+def pluginRoot = project.projectDir.parentFile
+def prebuiltDir = new File(pluginRoot, '.typst_flutter_prebuilt/android')
 
 def usePrebuilt = prebuiltDir.exists()
 
 android {
-    if (project.android.hasProperty("namespace")) {
+    if (project.android.hasProperty('namespace')) {
         namespace 'com.ajmalbuv.typst_flutter'
     }
 
@@ -74,14 +64,14 @@ android {
     if (usePrebuilt) {
         sourceSets {
             main {
-                jniLibs.srcDirs += [prebuiltDir.absolutePath]
+                jniLibs.srcDirs = [prebuiltDir.absolutePath]
             }
         }
     }
 }
 
 if (!usePrebuilt) {
-    logger.lifecycle("""
+    logger.lifecycle('''
     ┌──────────────────────────────────────────────────────────────────┐
     │  typst_flutter: pre-built binaries not found.                    │
     │  Falling back to Cargokit (requires Rust on build machine).      │
@@ -89,10 +79,10 @@ if (!usePrebuilt) {
     │  To avoid compiling from source, run once:                       │
     │    dart run typst_flutter:setup                                  │
     └──────────────────────────────────────────────────────────────────┘
-    """)
-    apply from: "../rust_builder/cargokit/gradle/plugin.gradle"
+    ''')
+    apply from: '../rust_builder/cargokit/gradle/plugin.gradle'
     cargokit {
-        manifestDir = "../rust"
-        libname = "typst_flutter"
+        manifestDir = '../rust'
+        libname = 'typst_flutter'
     }
 }

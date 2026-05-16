@@ -40,21 +40,21 @@ apply plugin: 'com.android.library'
 
 def prebuiltDir = new File(
     rootProject.projectDir.parentFile,          // Flutter app root
-    ".dart_tool/pub/prebuilt/typst_flutter/android"
+    '.dart_tool/pub/prebuilt/typst_flutter/android'
 )
 
 // Also try the direct path from the plugin's location (when used as a
 // path dependency during development).
 def pluginPrebuiltDir = new File(
     project.projectDir.parentFile.parentFile,   // rust_builder/ → package root
-    ".typst_flutter_prebuilt/android"
+    '.typst_flutter_prebuilt/android'
 )
 
 def usePrebuilt = prebuiltDir.exists() || pluginPrebuiltDir.exists()
 def activePrebuiltDir = prebuiltDir.exists() ? prebuiltDir : pluginPrebuiltDir
 
 android {
-    if (project.android.hasProperty("namespace")) {
+    if (project.android.hasProperty('namespace')) {
         namespace 'com.flutter_rust_bridge.rust_lib_typst_flutter'
     }
 
@@ -77,7 +77,7 @@ android {
         // from the downloaded directory. No NDK compilation needed.
         sourceSets {
             main {
-                jniLibs.srcDirs += [activePrebuiltDir.absolutePath]
+                jniLibs.srcDirs = [activePrebuiltDir.absolutePath]
             }
         }
     }
@@ -87,7 +87,7 @@ if (!usePrebuilt) {
     // ── Cargokit fallback ─────────────────────────────────────────────────────
     // Pre-built binaries not found. Fall back to building from Rust source.
     // Requires Rust + cargo to be installed on the build machine.
-    logger.lifecycle("""
+    logger.lifecycle('''
     ┌──────────────────────────────────────────────────────────────────┐
     │ typst_flutter: pre-built binaries not found.                     │
     │ Falling back to Cargokit (compiling from Rust source).           │
@@ -95,10 +95,10 @@ if (!usePrebuilt) {
     │ To avoid this, run once after flutter pub get:                   │
     │   dart run typst_flutter:setup                                   │
     └──────────────────────────────────────────────────────────────────┘
-    """)
-    apply from: "../cargokit/gradle/plugin.gradle"
+    ''')
+    apply from: '../cargokit/gradle/plugin.gradle'
     cargokit {
-        manifestDir = "../../rust"
-        libname = "rust_lib_typst_flutter"
+        manifestDir = '../../rust'
+        libname = 'typst_flutter'
     }
 }
