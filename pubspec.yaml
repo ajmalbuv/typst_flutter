@@ -1,9 +1,8 @@
 name: typst_flutter
 description: >-
   Embed the Typst typesetting compiler natively in Flutter via Rust FFI.
-  Compile Typst markup to PDF or rendered images on Android, iOS, macOS,
-  Linux, and Windows — no WASM, no WebView, no server required.
-version: 1.0.0
+  Compile Typst markup to PDF or rendered images on Android, iOS.
+version: 1.0.1
 homepage: https://github.com/ajmalbuv/typst_flutter
 repository: https://github.com/ajmalbuv/typst_flutter
 issue_tracker: https://github.com/ajmalbuv/typst_flutter/issues
@@ -17,7 +16,7 @@ topics:
 
 environment:
   sdk: ^3.11.0
-  flutter: '>=3.27.0'
+  flutter: ">=3.27.0"
 
 dependencies:
   archive: ^4.0.0
