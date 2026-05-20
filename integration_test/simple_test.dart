@@ -18,9 +18,7 @@ void main() {
     });
 
     test('compile() produces valid PDF bytes', () async {
-      final doc = await compiler.compile(
-        source: '= Hello, Typst!',
-      );
+      final doc = await compiler.compile(source: '= Hello, Typst!');
       // PDF files start with the %PDF- header
       expect(doc.pdf.length, greaterThan(100));
       expect(doc.pageCount, equals(1));
@@ -48,18 +46,12 @@ void main() {
       expect(result.width, greaterThan(0));
       expect(result.height, greaterThan(0));
       // 4 bytes per pixel (RGBA)
-      expect(
-        result.bytes.length,
-        equals(result.width * result.height * 4),
-      );
+      expect(result.bytes.length, equals(result.width * result.height * 4));
     });
 
     testWidgets('TypstView renders without throwing', (tester) async {
       await tester.pumpWidget(
-        const TypstView(
-          source: '= Flutter + Typst',
-          pixelsPerPt: 1,
-        ),
+        const TypstView(source: '= Flutter + Typst', pixelsPerPt: 1),
       );
       // Allow async compilation to complete
       await tester.pumpAndSettle(const Duration(seconds: 5));

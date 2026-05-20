@@ -270,17 +270,9 @@ class _TypstViewState extends State<TypstView> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (_image != null)
-          RawImage(
-            image: _image,
-            fit: widget.fit,
-          ),
+        if (_image != null) RawImage(image: _image, fit: widget.fit),
         if (_loading)
-          Positioned(
-            right: 8,
-            bottom: 8,
-            child: _SmallLoadingIndicator(),
-          ),
+          Positioned(right: 8, bottom: 8, child: _SmallLoadingIndicator()),
         if (_error != null && _image != null)
           Positioned(
             left: 0,
@@ -321,10 +313,7 @@ class _SmallLoadingIndicator extends StatelessWidget {
       child: const SizedBox(
         width: 16,
         height: 16,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Colors.white,
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
       ),
     );
   }

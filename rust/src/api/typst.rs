@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
+use flutter_rust_bridge::frb;
 use typst::diag::FileError;
 use typst::foundations::{Bytes, Datetime};
 use typst::layout::PagedDocument;
 use typst::syntax::{FileId, Source};
 use typst::text::{Font, FontBook};
-use typst::{Library, LibraryExt};
 use typst::utils::LazyHash;
+use typst::{Library, LibraryExt};
 
 // ── Public types exposed through the FRB bridge ─────────────────────────────
 
@@ -40,81 +41,95 @@ pub struct RenderResult {
     pub height: u32,
 }
 
-// ── Public API functions exposed through the FRB bridge ──────────────────────
+// ── TypstEngine — Stateful Compiler ─────────────────────────────────────────
 
-/// Compile Typst markup to PDF bytes.
-///
-/// - [markup]  — Typst source text.
-/// - [fonts]   — Raw bytes of font files to make available to the compiler.
-/// - [files]   — Virtual files (images, data files, includes) the markup may
-///               reference. Keys must match the paths used in markup exactly.
-pub fn compile_pdf(
-    markup: String,
-    fonts: Vec<Vec<u8>>,
-    files: Vec<VirtualFile>,
-) -> Result<TypstResult, String> {
-    let world = SimpleWorld::new(markup, fonts, files);
-    let document: PagedDocument =
-        typst::compile(&world).output.map_err(|errs| format_errors(&errs))?;
-    let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
-        .map_err(|e| format!("{e:?}"))?;
-
-    Ok(TypstResult {
-        bytes: pdf,
-        page_count: document.pages.len() as u32,
-    })
+#[frb(opaque)]
+pub struct TypstEngine {
+    world: SimpleWorld,
 }
 
-/// Render a single page of a Typst document to raw RGBA pixels.
-///
-/// - [markup]       — Typst source text.
-/// - [fonts]        — Raw bytes of font files.
-/// - [files]        — Virtual files the markup may reference.
-/// - [page_index]   — Zero-based page index.
-/// - [pixel_per_pt] — Pixels per typographic point (1pt = 1/72 inch).
-///                    Use 2.0 for a crisp rendering on 2× displays.
-///
-/// Returns raw RGBA bytes (4 bytes per pixel), plus width and height.
-/// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into
-/// a [ui.Image].
-pub fn render_page(
-    markup: String,
-    fonts: Vec<Vec<u8>>,
-    files: Vec<VirtualFile>,
-    page_index: usize,
-    pixel_per_pt: f32,
-) -> Result<RenderResult, String> {
-    let world = SimpleWorld::new(markup, fonts, files);
-    let document: PagedDocument =
-        typst::compile(&world).output.map_err(|errs| format_errors(&errs))?;
-
-    if page_index >= document.pages.len() {
-        return Err(format!(
-            "Page index {page_index} out of bounds (document has {} page(s))",
-            document.pages.len()
-        ));
+impl TypstEngine {
+    /// Creates a new Typst engine with bundled default fonts.
+    #[frb(sync)]
+    pub fn new() -> Self {
+        Self {
+            world: SimpleWorld::new(),
+        }
     }
 
-    let page = &document.pages[page_index];
-    let canvas = typst_render::render(page, pixel_per_pt);
-
-    let width = canvas.width();
-    let height = canvas.height();
-    // Return raw RGBA bytes — 4 bytes per pixel, row-major order.
-    // This avoids a PNG encode/decode round-trip and is ~3× faster.
-    let bytes = canvas.data().to_vec();
-
-    Ok(RenderResult { bytes, width, height })
-}
-
-/// Returns the version string of the embedded Typst compiler.
-pub fn get_typst_version() -> String {
-    typst::syntax::package::PackageVersion {
-        major: 0,
-        minor: 14,
-        patch: 2,
+    /// Adds additional fonts to the engine.
+    pub fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
+        self.world.add_fonts(font_data);
     }
-    .to_string()
+
+    /// Compile Typst markup to PDF bytes.
+    ///
+    /// - [markup]  — Typst source text.
+    /// - [fonts]   — Raw bytes of font files to make available to the compiler.
+    /// - [files]   — Virtual files (images, data files, includes) the markup may
+    ///               reference. Keys must match the paths used in markup exactly.
+    pub fn compile_pdf(
+        &mut self,
+        markup: String,
+        files: Vec<VirtualFile>,
+    ) -> Result<TypstResult, String> {
+        self.world.set_markup(markup);
+        self.world.add_files(files);
+
+        let document: PagedDocument = typst::compile(&self.world)
+            .output
+            .map_err(|errs| format_errors(&errs))?;
+        let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
+            .map_err(|e| format!("{e:?}"))?;
+
+        Ok(TypstResult {
+            bytes: pdf,
+            page_count: document.pages.len() as u32,
+        })
+    }
+
+    /// Render a single page of a Typst document to raw RGBA pixels.
+    ///
+    /// - [markup]       — Typst source text.
+    /// - [fonts]        — Raw bytes of font files.
+    /// - [files]        — Virtual files the markup may reference.
+    /// - [page_index]   — Zero-based page index.
+    /// - [pixel_per_pt] — Pixels per typographic point (1pt = 1/72 inch).
+    ///                    Use 2.0 for a crisp rendering on 2× displays.
+    ///
+    /// Returns raw RGBA bytes (4 bytes per pixel), plus width and height.
+    /// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into
+    /// a [ui.Image].
+    pub fn render_page(
+        &mut self,
+        markup: String,
+        files: Vec<VirtualFile>,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<RenderResult, String> {
+        self.world.set_markup(markup);
+        self.world.add_files(files);
+
+        let document: PagedDocument = typst::compile(&self.world)
+            .output
+            .map_err(|errs| format_errors(&errs))?;
+
+        if page_index >= document.pages.len() {
+            return Err(format!(
+                "Page index {page_index} out of bounds (document has {} page(s))",
+                document.pages.len()
+            ));
+        }
+
+        let page = &document.pages[page_index];
+        let canvas = typst_render::render(page, pixel_per_pt);
+
+        Ok(RenderResult {
+            bytes: canvas.data().to_vec(),
+            width: canvas.width(),
+            height: canvas.height(),
+        })
+    }
 }
 
 // ── SimpleWorld — in-memory Typst World implementation ───────────────────────
@@ -129,29 +144,48 @@ struct SimpleWorld {
 }
 
 impl SimpleWorld {
-    fn new(markup: String, font_data: Vec<Vec<u8>>, virtual_files: Vec<VirtualFile>) -> Self {
+    fn new() -> Self {
         let mut fonts = Vec::new();
-        for data in font_data {
-            let bytes = Bytes::new(data);
-            fonts.extend(Font::iter(bytes));
-        }
 
-        // Normalise all virtual file paths to forward-slash form so that
-        // look-ups match regardless of the host OS path separator.
-        let files: HashMap<String, Bytes> = virtual_files
-            .into_iter()
-            .map(|vf| {
-                let normalised = vf.path.replace('\\', "/");
-                (normalised, Bytes::new(vf.bytes))
-            })
-            .collect();
+        // Bundled core fonts
+        let bundled = [
+            include_bytes!("../../assets/fonts/LibertinusSerif-Regular.otf").as_slice(),
+            include_bytes!("../../assets/fonts/NewCMMath-Book.otf").as_slice(),
+            include_bytes!("../../assets/fonts/DejaVuSansMono.ttf").as_slice(),
+        ];
+
+        for data in bundled {
+            fonts.extend(Font::iter(Bytes::new(data.to_vec())));
+        }
 
         Self {
             library: LazyHash::new(Library::builder().build()),
             book: LazyHash::new(FontBook::from_fonts(&fonts)),
             fonts,
-            source: Source::new(FileId::new(None, typst::syntax::VirtualPath::new("main.typ")), markup),
-            files,
+            source: Source::new(
+                FileId::new(None, typst::syntax::VirtualPath::new("main.typ")),
+                "".into(),
+            ),
+            files: HashMap::new(),
+        }
+    }
+
+    fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
+        for data in font_data {
+            let bytes = Bytes::new(data);
+            self.fonts.extend(Font::iter(bytes));
+        }
+        self.book = LazyHash::new(FontBook::from_fonts(&self.fonts));
+    }
+
+    fn set_markup(&mut self, markup: String) {
+        self.source = Source::new(self.source.id(), markup);
+    }
+
+    fn add_files(&mut self, virtual_files: Vec<VirtualFile>) {
+        for vf in virtual_files {
+            let normalised = vf.path.replace('\\', "/");
+            self.files.insert(normalised, Bytes::new(vf.bytes));
         }
     }
 }
@@ -197,10 +231,18 @@ impl typst::World for SimpleWorld {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Format a list of Typst diagnostic errors into a readable string.
 fn format_errors(errs: &[typst::diag::SourceDiagnostic]) -> String {
     errs.iter()
         .map(|e| format!("[{:?}] {}", e.severity, e.message))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+pub fn get_typst_version() -> String {
+    typst::syntax::package::PackageVersion {
+        major: 0,
+        minor: 14,
+        patch: 2,
+    }
+    .to_string()
 }

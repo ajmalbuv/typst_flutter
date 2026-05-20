@@ -37,10 +37,6 @@ migrate_working_dir/
 rust/target/
 rust_builder/target/
 
-# Cargo.lock should NOT be committed for library crates.
-# https://doc.rust-lang.org/cargo/faq.html#why-do-binaries-have-cargolock-in-version-control-but-not-libraries
-rust/Cargo.lock
-
 # Local Cargo overrides
 rust/.cargo/config.toml
 

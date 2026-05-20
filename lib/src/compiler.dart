@@ -30,24 +30,39 @@ import 'package:typst_flutter/src/rust/frb_generated.dart';
 /// final result = await compiler.renderPage(source: myMarkup);
 /// ```
 class TypstCompiler {
-  TypstCompiler._({required this.fonts});
+  TypstCompiler._({required this.engine});
 
-  /// The font source used by this compiler instance.
-  final FontSource fonts;
+  /// The underlying stateful Rust engine.
+  final api.TypstEngine engine;
 
   /// Creates a [TypstCompiler] and initialises the native bridge.
   ///
-  /// [fonts] — font files to make available to the Typst compiler.
-  /// Defaults to [FontSource.none] (Typst built-in fonts only).
+  /// [fonts] — additional font files to make available to the Typst compiler.
+  /// These are added on top of the bundled core fonts (Libertinus, NewCM Math).
   ///
   /// This is safe to call multiple times; the native library is only
   /// initialised once.
   static Future<TypstCompiler> create({FontSource? fonts}) async {
     await RustLib.init();
-    return TypstCompiler._(fonts: fonts ?? FontSource.none());
+    final engine = api.TypstEngine();
+    if (fonts != null) {
+      final fontBytes = await fonts.load();
+      if (fontBytes.isNotEmpty) {
+        await engine.addFonts(fontData: fontBytes);
+      }
+    }
+    return TypstCompiler._(engine: engine);
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
+
+  /// Adds more fonts to this compiler instance.
+  Future<void> addFonts(FontSource fonts) async {
+    final fontBytes = await fonts.load();
+    if (fontBytes.isNotEmpty) {
+      await engine.addFonts(fontData: fontBytes);
+    }
+  }
 
   /// Compiles Typst [source] markup to a PDF document.
   ///
@@ -64,13 +79,11 @@ class TypstCompiler {
     required String source,
     FileSource? files,
   }) async {
-    final fontBytes = await fonts.load();
     final virtualFiles = await _buildVirtualFiles(files);
 
     try {
-      final result = await api.compilePdf(
+      final result = await engine.compilePdf(
         markup: source,
-        fonts: fontBytes,
         files: virtualFiles,
       );
       return TypstDocument.fromPdf(
@@ -100,13 +113,11 @@ class TypstCompiler {
     double pixelsPerPt = 2.0,
     FileSource? files,
   }) async {
-    final fontBytes = await fonts.load();
     final virtualFiles = await _buildVirtualFiles(files);
 
     try {
-      final result = await api.renderPage(
+      final result = await engine.renderPage(
         markup: source,
-        fonts: fontBytes,
         files: virtualFiles,
         pageIndex: BigInt.from(pageIndex),
         pixelPerPt: pixelsPerPt,

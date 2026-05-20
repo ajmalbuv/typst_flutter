@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -19,9 +20,9 @@ class ExampleApp extends StatefulWidget {
 class _ExampleAppState extends State<ExampleApp> {
   late Future<TypstCompiler> _compilerFuture;
   final _controller = TextEditingController(
-    text: '''
+    text: r'''
 #set page(width: 148mm, height: 210mm, margin: 1cm)
-#set text(font: "Linux Libertine", size: 12pt)
+#set text(font: "Libertinus Serif", size: 12pt)
 
 = Hello Typst!
 
@@ -29,9 +30,17 @@ This document was compiled *natively* inside a Flutter app using
 the Typst compiler via Rust FFI.
 
 == Features
-- *Fast*: Sub-100ms compilation
-- *Beautiful*: Professional typography
+- *Fast*: Sub-100ms compilation (now stateful!)
+- *Beautiful*: Professional typography bundled in
 - *Native*: No WASM or WebView overhead
+
+== Math Support
+Typst has first-class math support. Here is the quadratic formula:
+
+$ x = (-b plus.minus sqrt(b^2 - 4a c)) / (2a) $
+
+And some calculus:
+$ integral_0^infinity e^(-x^2) dx = sqrt(pi) / 2 $
 ''',
   );
 
@@ -43,7 +52,7 @@ the Typst compiler via Rust FFI.
   @override
   void initState() {
     super.initState();
-    _initCompiler();
+    unawaited(_initCompiler());
   }
 
   Future<void> _initCompiler() async {
@@ -78,9 +87,7 @@ the Typst compiler via Rust FFI.
     try {
       debugPrint('Compiling Typst source...');
       final compiler = await _compilerFuture;
-      final result = await compiler.renderPage(
-        source: _controller.text,
-      );
+      final result = await compiler.renderPage(source: _controller.text);
       debugPrint('Compilation success! Rendering to image...');
       final image = await result.toImage();
       debugPrint('Image rendered: ${image.width}x${image.height}');
