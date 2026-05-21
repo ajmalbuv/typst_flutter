@@ -40,7 +40,7 @@ Typst has first-class math support. Here is the quadratic formula:
 $ x = (-b plus.minus sqrt(b^2 - 4a c)) / (2a) $
 
 And some calculus:
-$ integral_0^infinity e^(-x^2) dx = sqrt(pi) / 2 $
+$ integral_0^infinity e^(-x^2) dif x = sqrt(pi) / 2 $
 ''',
   );
 
