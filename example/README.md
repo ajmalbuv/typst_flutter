@@ -1,17 +1,22 @@
 # typst_flutter_example
 
-Demonstrates how to use the typst_flutter plugin.
+This directory contains a complete, runnable Flutter application demonstrating the `typst_flutter` package.
 
-## Getting Started
+## Running the Example
 
-This project is a starting point for a Flutter application.
+Because `typst_flutter` is zero-configuration, you do not need to install Rust or run any setup scripts to test the example.
 
-A few resources to get you started if this is your first Flutter project:
+Simply run:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+flutter run
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The native build systems will automatically fetch the required prebuilt Typst binaries for your target architecture in the background.
+
+## What it demonstrates
+
+- Initializing the `TypstCompiler` with embedded font assets.
+- Using the `TypstDocumentViewer` widget for a scrollable, cached PDF preview UI.
+- Rendering pages as `ui.Image` pixels or crisp SVGs.
+- Handling compiler errors elegantly using the `TypstDiagnostic` class.

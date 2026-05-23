@@ -11,10 +11,10 @@ Compile Typst markup to high-quality PDF documents or rendered images on Android
 
 ## Features
 
-- **Native performance:** Typst runs directly on the device using a Rust core.
-- **Zero Rust required:** End-users can download pre-built native binaries via a simple Dart script.
-- **Virtual File System:** Pass Flutter assets and raw bytes directly into the Typst compiler via `FileSource`.
-- **Live Preview:** Included `TypstView` widget with debounced live-reload, perfect for building editors.
+- **Native Performance:** Typst runs directly on the device using a Rust core, compiling most documents in under 100ms.
+- **Widgets Included:** Drop-in `TypstDocumentViewer` and `TypstView` widgets for instant live previews.
+- **Structured Error Handling:** Get detailed `TypstDiagnostic` error lines when Typst compilation fails, perfect for building in-app editors.
+- **Virtual File System:** Pass Flutter assets and raw memory bytes directly into the Typst compiler via `FontSource`.
 
 ## Getting started
 
@@ -25,17 +25,13 @@ dependencies:
   typst_flutter: ^1.0.0
 ```
 
-### Install native binaries
-
-To avoid compiling the Rust core from source (which requires a full Rust toolchain), run the setup script once to download the pre-built native libraries for your current platform:
-
-```bash
-dart run typst_flutter:setup
-```
+That's it! When you run `flutter build` or `flutter run`, the platform build scripts (Gradle/CocoaPods) will automatically fetch the correct native binaries for your architecture in the background.
 
 ## Usage
 
 ### Rendering a PDF
+
+Use `TypstCompiler.create()` to initialize the engine and build documents:
 
 ```dart
 import 'package:typst_flutter/typst_flutter.dart';
@@ -52,14 +48,14 @@ final doc = await compiler.compile(
 );
 
 print('Generated a ${doc.pageCount}-page PDF (${doc.pdf.length} bytes).');
-// You can now save doc.pdf to disk or display it with printing/pdf packages.
+// You can now save doc.pdf to disk or share it!
 ```
 
-### Displaying a live preview widget
+### Live Preview Widget
 
-The `TypstView` widget automatically recompiles and renders when the source or assets change. For scalable vector graphics, use `TypstSvgView`. For multi-page scrollable documents, use `TypstDocumentViewer`.
+The `TypstDocumentViewer` widget automatically compiles and renders your document, providing a scrollable, zoomable UI. It caches compiled pages internally for butter-smooth scrolling.
 
-````dart
+```dart
 import 'package:flutter/material.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
@@ -74,25 +70,25 @@ class MyEditor extends StatelessWidget {
         And scrolling is instantly fast because the document is cached!
       ''',
       useSvg: true, // Use SVG for crisp vector text
-      date: DateTime.now(), // Enable #datetime.today() support
     );
   }
 }
+```
+
+## Advanced Fallback (Cargokit)
+
+If you are building for a custom architecture or operating completely offline, the auto-download mechanism will gracefully fail and fall back to compiling the Rust core from source using **Cargokit**.
+
+_Note: Source compilation requires a full Rust toolchain (`rustup`) installed on your build machine and may take 5–15 minutes on the first run._
 
 ## Testing
 
-Because this package relies on native Rust libraries via FFI, tests must be run as integration tests against a host platform.
+Because this package relies on native Rust libraries via FFI, unit tests must be run as integration tests against a host platform.
 
-1. Ensure you have downloaded the native binaries for your host machine:
-   ```bash
-   dart run typst_flutter:setup
-````
-
-2. Run the integration tests using the flutter test command:
-   ```bash
-   flutter test integration_test/simple_test.dart
-   ```
+```bash
+flutter test integration_test/simple_test.dart
+```
 
 ## Author
 
-Ajmal (`ajmalbuv`)
+Ajmal ([@ajmalbuv](https://github.com/ajmalbuv))
