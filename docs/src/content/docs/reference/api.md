@@ -22,6 +22,10 @@ Compiles the Typst `source` into a PDF. Returns a `TypstDocument` containing the
 
 Compiles the document and renders a specific page as a raw RGBA image buffer (useful for high-performance custom painting).
 
+#### `Future<Uint8List> renderPageAsPng({required String source, int pageIndex = 0, double pixelsPerPt = 2.0})`
+
+Renders a specific page directly to PNG bytes entirely in Rust. This avoids the Flutter UI thread and GPU roundtrip, making it ideal for background processing or saving to disk.
+
 ---
 
 ### `TypstDocument`
@@ -67,4 +71,8 @@ TypstDocumentViewer(
 
 ### `TypstView`
 
-A lower-level widget that renders exactly one page of a Typst document. Useful for custom paging logic.
+A lower-level widget that renders exactly one page of a Typst document as a raster image. Useful for custom paging logic.
+
+### `TypstSvgView`
+
+A lower-level widget similar to `TypstView`, but it renders the page as a scalable vector graphic (SVG). This ensures the text remains razor-sharp at any zoom level.
