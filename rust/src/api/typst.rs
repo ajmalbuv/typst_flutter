@@ -41,11 +41,24 @@ pub struct RenderResult {
     pub height: u32,
 }
 
+#[derive(Debug, Clone)]
+pub struct TypstDiagnostic {
+    pub severity: String,
+    pub message: String,
+    pub hints: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypstCompileError {
+    pub diagnostics: Vec<TypstDiagnostic>,
+}
+
 // ── TypstEngine — Stateful Compiler ─────────────────────────────────────────
 
 #[frb(opaque)]
 pub struct TypstEngine {
     world: SimpleWorld,
+    document: Option<PagedDocument>,
 }
 
 impl TypstEngine {
@@ -54,6 +67,7 @@ impl TypstEngine {
     pub fn new() -> Self {
         Self {
             world: SimpleWorld::new(),
+            document: None,
         }
     }
 
@@ -62,25 +76,76 @@ impl TypstEngine {
         self.world.add_fonts(font_data);
     }
 
-    /// Compile Typst markup to PDF bytes.
+    /// Compile a document and keep it in memory for fast rendering.
     ///
-    /// - [markup]  — Typst source text.
-    /// - [fonts]   — Raw bytes of font files to make available to the compiler.
-    /// - [files]   — Virtual files (images, data files, includes) the markup may
-    ///               reference. Keys must match the paths used in markup exactly.
+    /// Returns the total page count.
+    pub fn compile_document(
+        &mut self,
+        markup: String,
+        files: Vec<VirtualFile>,
+        sys_time: Option<i64>,
+    ) -> Result<u32, TypstCompileError> {
+        self.world.set_markup(markup);
+        self.world.set_files(files);
+        self.world.set_sys_time(sys_time);
+
+        let document: PagedDocument = typst::compile(&self.world)
+            .output
+            .map_err(|errs| map_errors(&errs))?;
+
+        let count = document.pages.len() as u32;
+        self.document = Some(document);
+        Ok(count)
+    }
+
+    /// Renders a single page of the currently compiled document.
+    pub fn render_cached_page(
+        &self,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<RenderResult, String> {
+        let doc = self.document.as_ref().ok_or("Document not compiled")?;
+        if page_index >= doc.pages.len() {
+            return Err(format!("Page index out of bounds"));
+        }
+        let page = &doc.pages[page_index];
+        let canvas = typst_render::render(page, pixel_per_pt);
+        Ok(RenderResult {
+            bytes: canvas.data().to_vec(),
+            width: canvas.width(),
+            height: canvas.height(),
+        })
+    }
+
+    /// Renders a single page of the currently compiled document as an SVG string.
+    pub fn render_cached_page_as_svg(&self, page_index: usize) -> Result<String, String> {
+        let doc = self.document.as_ref().ok_or("Document not compiled")?;
+        if page_index >= doc.pages.len() {
+            return Err(format!("Page index out of bounds"));
+        }
+        let page = &doc.pages[page_index];
+        Ok(typst_svg::svg(page))
+    }
+
+    /// Compile Typst markup to PDF bytes.
     pub fn compile_pdf(
         &mut self,
         markup: String,
         files: Vec<VirtualFile>,
-    ) -> Result<TypstResult, String> {
-        self.world.set_markup(markup);
-        self.world.set_files(files);
+        sys_time: Option<i64>,
+    ) -> Result<TypstResult, TypstCompileError> {
+        self.compile_document(markup, files, sys_time)?;
+        let document = self.document.as_ref().unwrap();
 
-        let document: PagedDocument = typst::compile(&self.world)
-            .output
-            .map_err(|errs| format_errors(&errs))?;
-        let pdf = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
-            .map_err(|e| format!("{e:?}"))?;
+        let pdf = typst_pdf::pdf(document, &typst_pdf::PdfOptions::default()).map_err(|e| {
+            TypstCompileError {
+                diagnostics: vec![TypstDiagnostic {
+                    severity: "error".to_string(),
+                    message: format!("{e:?}"),
+                    hints: vec![],
+                }],
+            }
+        })?;
 
         Ok(TypstResult {
             bytes: pdf,
@@ -89,45 +154,23 @@ impl TypstEngine {
     }
 
     /// Render a single page of a Typst document to raw RGBA pixels.
-    ///
-    /// - [markup]       — Typst source text.
-    /// - [files]        — Virtual files the markup may reference.
-    /// - [page_index]   — Zero-based page index.
-    /// - [pixel_per_pt] — Pixels per typographic point (1pt = 1/72 inch).
-    ///                    Use 2.0 for a crisp rendering on 2× displays.
-    ///
-    /// Returns raw RGBA bytes (4 bytes per pixel), plus width and height.
-    /// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into a
-    /// Flutter [ui.Image].
     pub fn render_page(
         &mut self,
         markup: String,
         files: Vec<VirtualFile>,
         page_index: usize,
         pixel_per_pt: f32,
-    ) -> Result<RenderResult, String> {
-        self.world.set_markup(markup);
-        self.world.set_files(files);
-
-        let document: PagedDocument = typst::compile(&self.world)
-            .output
-            .map_err(|errs| format_errors(&errs))?;
-
-        if page_index >= document.pages.len() {
-            return Err(format!(
-                "Page index {page_index} out of bounds (document has {} page(s))",
-                document.pages.len()
-            ));
-        }
-
-        let page = &document.pages[page_index];
-        let canvas = typst_render::render(page, pixel_per_pt);
-
-        Ok(RenderResult {
-            bytes: canvas.data().to_vec(),
-            width: canvas.width(),
-            height: canvas.height(),
-        })
+        sys_time: Option<i64>,
+    ) -> Result<RenderResult, TypstCompileError> {
+        self.compile_document(markup, files, sys_time)?;
+        self.render_cached_page(page_index, pixel_per_pt)
+            .map_err(|e| TypstCompileError {
+                diagnostics: vec![TypstDiagnostic {
+                    severity: "error".to_string(),
+                    message: e,
+                    hints: vec![],
+                }],
+            })
     }
 
     /// Compiles Typst markup to a list of SVG strings (one per page).
@@ -135,13 +178,10 @@ impl TypstEngine {
         &mut self,
         markup: String,
         files: Vec<VirtualFile>,
-    ) -> Result<Vec<String>, String> {
-        self.world.set_markup(markup);
-        self.world.set_files(files);
-
-        let document: PagedDocument = typst::compile(&self.world)
-            .output
-            .map_err(|errs| format_errors(&errs))?;
+        sys_time: Option<i64>,
+    ) -> Result<Vec<String>, TypstCompileError> {
+        self.compile_document(markup, files, sys_time)?;
+        let document = self.document.as_ref().unwrap();
 
         let mut svgs = Vec::new();
         for page in &document.pages {
@@ -152,46 +192,39 @@ impl TypstEngine {
     }
 
     /// Renders a single page of a Typst document to PNG bytes.
-    ///
-    /// Equivalent to [render_page] but performs the PNG encoding inside Rust,
-    /// using `tiny_skia`'s built-in encoder — no GPU round-trip required.
-    ///
-    /// - [markup]       — Typst source text.
-    /// - [files]        — Virtual files the markup may reference.
-    /// - [page_index]   — Zero-based page index.
-    /// - [pixel_per_pt] — Pixels per typographic point; use 2.0 for HiDPI.
-    ///
-    /// Returns raw PNG bytes (`Vec<u8>`) ready to write to a file or share.
     pub fn render_page_as_png(
         &mut self,
         markup: String,
         files: Vec<VirtualFile>,
         page_index: usize,
         pixel_per_pt: f32,
-    ) -> Result<Vec<u8>, String> {
-        self.world.set_markup(markup);
-        self.world.set_files(files);
-
-        let document: PagedDocument = typst::compile(&self.world)
-            .output
-            .map_err(|errs| format_errors(&errs))?;
+        sys_time: Option<i64>,
+    ) -> Result<Vec<u8>, TypstCompileError> {
+        self.compile_document(markup, files, sys_time)?;
+        let document = self.document.as_ref().unwrap();
 
         if page_index >= document.pages.len() {
-            return Err(format!(
-                "Page index {page_index} out of bounds (document has {} page(s))",
-                document.pages.len()
-            ));
+            return Err(TypstCompileError {
+                diagnostics: vec![TypstDiagnostic {
+                    severity: "error".to_string(),
+                    message: format!("Page index out of bounds"),
+                    hints: vec![],
+                }],
+            });
         }
 
         let page = &document.pages[page_index];
         let canvas = typst_render::render(page, pixel_per_pt);
 
-        canvas
-            .encode_png()
-            .map_err(|e| format!("PNG encoding failed: {e}"))
+        canvas.encode_png().map_err(|e| TypstCompileError {
+            diagnostics: vec![TypstDiagnostic {
+                severity: "error".to_string(),
+                message: format!("PNG encoding failed: {e}"),
+                hints: vec![],
+            }],
+        })
     }
 }
-
 
 // ── SimpleWorld — in-memory Typst World implementation ───────────────────────
 
@@ -202,6 +235,7 @@ struct SimpleWorld {
     source: Source,
     /// Virtual file system: normalised path string → file bytes.
     files: HashMap<String, Bytes>,
+    sys_time: Option<i64>,
 }
 
 impl SimpleWorld {
@@ -228,6 +262,7 @@ impl SimpleWorld {
                 "".into(),
             ),
             files: HashMap::new(),
+            sys_time: None,
         }
     }
 
@@ -254,6 +289,10 @@ impl SimpleWorld {
             let normalised = vf.path.replace('\\', "/");
             self.files.insert(normalised, Bytes::new(vf.bytes));
         }
+    }
+
+    fn set_sys_time(&mut self, sys_time: Option<i64>) {
+        self.sys_time = sys_time;
     }
 }
 
@@ -283,8 +322,7 @@ impl typst::World for SimpleWorld {
 
         match self.files.get(&key) {
             Some(bytes) => {
-                let text = std::str::from_utf8(bytes)
-                    .map_err(|_| FileError::InvalidUtf8)?;
+                let text = std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
                 Ok(Source::new(id, text.to_string()))
             }
             None => Err(FileError::NotFound(vpath.into())),
@@ -307,19 +345,30 @@ impl typst::World for SimpleWorld {
             .ok_or_else(|| FileError::NotFound(vpath.into()))
     }
 
-    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
-        // Return None for fully deterministic output.
-        None
+    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+        self.sys_time.and_then(|timestamp| {
+            // Offset is given in hours by Typst.
+            let offset_secs = offset.unwrap_or(0) * 3600;
+            let final_timestamp = timestamp + offset_secs;
+            time::OffsetDateTime::from_unix_timestamp(final_timestamp)
+                .ok()
+                .and_then(|dt| Datetime::from_ymd(dt.year(), dt.month() as u8, dt.day()))
+        })
     }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn format_errors(errs: &[typst::diag::SourceDiagnostic]) -> String {
-    errs.iter()
-        .map(|e| format!("[{:?}] {}", e.severity, e.message))
-        .collect::<Vec<_>>()
-        .join("\n")
+fn map_errors(errs: &[typst::diag::SourceDiagnostic]) -> TypstCompileError {
+    let diagnostics = errs
+        .iter()
+        .map(|e| TypstDiagnostic {
+            severity: format!("{:?}", e.severity).to_lowercase(),
+            message: e.message.to_string(),
+            hints: e.hints.iter().map(|h| h.to_string()).collect(),
+        })
+        .collect();
+    TypstCompileError { diagnostics }
 }
 
 pub fn get_typst_version() -> String {

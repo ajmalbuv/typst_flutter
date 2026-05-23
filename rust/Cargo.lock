@@ -2880,6 +2880,7 @@ version = "1.0.0"
 dependencies = [
  "comemo",
  "flutter_rust_bridge",
+ "time",
  "typst",
  "typst-pdf",
  "typst-render",

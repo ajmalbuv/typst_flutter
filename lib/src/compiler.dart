@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:typst_flutter/src/document.dart';
 import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
@@ -61,61 +61,43 @@ class TypstCompiler {
     }
   }
 
-  /// Compiles Typst [source] markup to a PDF document.
-  ///
-  /// [files] — optional virtual file system for images, data files, or
-  /// included `.typ` files referenced in [source]. The map key must match
-  /// the path written in the markup exactly (e.g. `'logo.png'` for
-  /// `#image("logo.png")`).
-  ///
-  /// Returns a [TypstDocument] whose [TypstDocument.pdf] property contains
-  /// the raw PDF bytes.
-  ///
-  /// Throws [TypstCompileException] if the Typst source has errors.
-  Future<TypstDocument> compile({
+  PlatformInt64? _dateTimeToSysTime(DateTime? date) {
+    if (date == null) return null;
+    return PlatformInt64Util.from((date.millisecondsSinceEpoch / 1000).round());
+  }
+
+  /// Compiles a document and keeps it in memory for rendering of multipages.
+  /// Returns the total page count.
+  Future<int> compileDocument({
     required String source,
     FileSource? files,
+    DateTime? date,
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
-
     try {
-      final result = await engine.compilePdf(
+      return await engine.compileDocument(
         markup: source,
         files: virtualFiles,
+        sysTime: _dateTimeToSysTime(date),
       );
-      return TypstDocument.fromPdf(
-        pdfBytes: result.bytes,
-        pageCount: result.pageCount,
+    } on api.TypstCompileError catch (e) {
+      throw TypstCompileException(
+        'Compilation failed',
+        diagnostics: e.diagnostics,
       );
     } catch (e) {
       throw TypstCompileException('$e');
     }
   }
 
-  /// Renders a single page of [source] markup to a raster image.
-  ///
-  /// [pageIndex]    — zero-based page index (default: 0).
-  /// [pixelsPerPt]  — rendering density; use 2.0 for crisp display on
-  ///                  high-DPI screens (default: 2.0).
-  /// [files]        — optional virtual file system for images, data files,
-  ///                  or included `.typ` files.
-  ///
-  /// Returns a [TypstRenderResult] whose [TypstRenderResult.toImage] method
-  /// converts the raw pixels into a [ui.Image] ready for display.
-  ///
-  /// Throws [TypstCompileException] if the Typst source has errors.
-  Future<TypstRenderResult> renderPage({
-    required String source,
+  /// Renders single page of the currently compiled document to a raster image.
+  /// Call [compileDocument] first.
+  Future<TypstRenderResult> renderCachedPage({
     int pageIndex = 0,
     double pixelsPerPt = 2.0,
-    FileSource? files,
   }) async {
-    final virtualFiles = await _buildVirtualFiles(files);
-
     try {
-      final result = await engine.renderPage(
-        markup: source,
-        files: virtualFiles,
+      final result = await engine.renderCachedPage(
         pageIndex: BigInt.from(pageIndex),
         pixelPerPt: pixelsPerPt,
       );
@@ -129,17 +111,84 @@ class TypstCompiler {
     }
   }
 
+  /// Renders a single page of the currently compiled document to an SVG string.
+  /// Call [compileDocument] first.
+  Future<String> renderCachedPageAsSvg({int pageIndex = 0}) async {
+    try {
+      return await engine.renderCachedPageAsSvg(
+        pageIndex: BigInt.from(pageIndex),
+      );
+    } catch (e) {
+      throw TypstCompileException('$e');
+    }
+  }
+
+  /// Compiles Typst [source] markup to a PDF document.
+  Future<TypstDocument> compile({
+    required String source,
+    FileSource? files,
+    DateTime? date,
+  }) async {
+    final virtualFiles = await _buildVirtualFiles(files);
+
+    try {
+      final result = await engine.compilePdf(
+        markup: source,
+        files: virtualFiles,
+        sysTime: _dateTimeToSysTime(date),
+      );
+      return TypstDocument.fromPdf(
+        pdfBytes: result.bytes,
+        pageCount: result.pageCount,
+      );
+    } on api.TypstCompileError catch (e) {
+      throw TypstCompileException(
+        'Compilation failed',
+        diagnostics: e.diagnostics,
+      );
+    } catch (e) {
+      throw TypstCompileException('$e');
+    }
+  }
+
+  /// Renders a single page of [source] markup to a raster image.
+  Future<TypstRenderResult> renderPage({
+    required String source,
+    int pageIndex = 0,
+    double pixelsPerPt = 2.0,
+    FileSource? files,
+    DateTime? date,
+  }) async {
+    final virtualFiles = await _buildVirtualFiles(files);
+
+    try {
+      final result = await engine.renderPage(
+        markup: source,
+        files: virtualFiles,
+        pageIndex: BigInt.from(pageIndex),
+        pixelPerPt: pixelsPerPt,
+        sysTime: _dateTimeToSysTime(date),
+      );
+      return TypstRenderResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+      );
+    } on api.TypstCompileError catch (e) {
+      throw TypstCompileException(
+        'Compilation failed',
+        diagnostics: e.diagnostics,
+      );
+    } catch (e) {
+      throw TypstCompileException('$e');
+    }
+  }
+
   /// Compiles Typst [source] markup into a list of SVG strings (one per page).
-  ///
-  /// [files] — optional virtual file system for images, data files, or
-  /// included `.typ` files.
-  ///
-  /// Returns a [TypstDocument] containing the SVG strings for each page.
-  ///
-  /// Throws [TypstCompileException] if the Typst source has errors.
   Future<TypstDocument> compileSvg({
     required String source,
     FileSource? files,
+    DateTime? date,
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
 
@@ -147,34 +196,26 @@ class TypstCompiler {
       final result = await engine.compileSvg(
         markup: source,
         files: virtualFiles,
+        sysTime: _dateTimeToSysTime(date),
       );
       return TypstDocument.fromSvg(svgPages: result);
+    } on api.TypstCompileError catch (e) {
+      throw TypstCompileException(
+        'Compilation failed',
+        diagnostics: e.diagnostics,
+      );
     } catch (e) {
       throw TypstCompileException('$e');
     }
   }
 
   /// Renders a single page of [source] markup as PNG bytes.
-  ///
-  /// This is the preferred way to get a PNG — encoding happens inside Rust
-  /// (via `tiny_skia`) so there is no GPU texture round-trip.
-  ///
-  /// [pageIndex]    — zero-based page index (default: 0).
-  /// [pixelsPerPt]  — rendering density; use 2.0 for HiDPI (default: 2.0).
-  /// [files]        — optional virtual file system for images, includes, etc.
-  ///
-  /// Returns a [Uint8List] of raw PNG bytes ready to write to disk or share:
-  /// ```dart
-  /// final png = await compiler.renderPageAsPng(source: myMarkup);
-  /// await Share.shareXFiles([XFile.fromData(png, mimeType: 'image/png')]);
-  /// ```
-  ///
-  /// Throws [TypstCompileException] if the Typst source has errors.
   Future<Uint8List> renderPageAsPng({
     required String source,
     int pageIndex = 0,
     double pixelsPerPt = 2.0,
     FileSource? files,
+    DateTime? date,
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
     try {
@@ -183,6 +224,12 @@ class TypstCompiler {
         files: virtualFiles,
         pageIndex: BigInt.from(pageIndex),
         pixelPerPt: pixelsPerPt,
+        sysTime: _dateTimeToSysTime(date),
+      );
+    } on api.TypstCompileError catch (e) {
+      throw TypstCompileException(
+        'Compilation failed',
+        diagnostics: e.diagnostics,
       );
     } catch (e) {
       throw TypstCompileException('$e');
@@ -224,9 +271,6 @@ class TypstRenderResult {
   /// Decodes the raw RGBA pixel data into a [ui.Image] that Flutter can
   /// display with a `RawImage` widget or a `CustomPainter`.
   Future<ui.Image> toImage() async {
-    // The Rust render_page function returns raw RGBA bytes — 4 bytes per
-    // pixel in row-major order. ui.ImageDescriptor.raw() decodes these
-    // directly into a gpu texture without any intermediate PNG roundtrip.
     final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
@@ -240,18 +284,6 @@ class TypstRenderResult {
   }
 
   /// Encodes the raw RGBA pixels as a PNG and returns the PNG bytes.
-  ///
-  /// Prefer [TypstCompiler.renderPageAsPng] when you only need PNG bytes —
-  /// that path encodes entirely in Rust with no GPU round-trip.
-  ///
-  /// Use this method when you already have a [TypstRenderResult] (e.g. you
-  /// displayed the image first and now want to export it).
-  ///
-  /// ```dart
-  /// final result = await compiler.renderPage(source: myMarkup);
-  /// final png = await result.toPng();
-  /// await Share.shareXFiles([XFile.fromData(png, mimeType: 'image/png')]);
-  /// ```
   Future<Uint8List> toPng() async {
     final image = await toImage();
     try {

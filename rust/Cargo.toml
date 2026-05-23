@@ -16,6 +16,7 @@ typst-render = "0.14.2"
 typst-svg = "0.14.2"
 comemo = "0.5.1"
 flutter_rust_bridge = "=2.12.0"
+time = "0.3.47"
 
 [profile.release]
 opt-level = "z"      # optimise for binary size

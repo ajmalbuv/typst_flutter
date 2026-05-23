@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_fonts`, `format_errors`, `new`, `set_files`, `set_markup`
+// These functions are ignored because they are not marked as `pub`: `add_fonts`, `map_errors`, `new`, `set_files`, `set_markup`, `set_sys_time`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SimpleWorld`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `book`, `file`, `font`, `library`, `main`, `source`, `today`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `book`, `clone`, `clone`, `file`, `fmt`, `fmt`, `font`, `library`, `main`, `source`, `today`
 
 Future<String> getTypstVersion() =>
     RustLib.instance.api.crateApiTypstGetTypstVersion();
@@ -17,6 +17,15 @@ Future<String> getTypstVersion() =>
 abstract class TypstEngine implements RustOpaqueInterface {
   /// Adds additional fonts to the engine.
   Future<void> addFonts({required List<Uint8List> fontData});
+
+  /// Compile a document and keep it in memory for fast rendering.
+  ///
+  /// Returns the total page count.
+  Future<int> compileDocument({
+    required String markup,
+    required List<VirtualFile> files,
+    PlatformInt64? sysTime,
+  });
 
   /// Compile Typst markup to PDF bytes.
   ///
@@ -27,16 +36,27 @@ abstract class TypstEngine implements RustOpaqueInterface {
   Future<TypstResult> compilePdf({
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   });
 
   /// Compiles Typst markup to a list of SVG strings (one per page).
   Future<List<String>> compileSvg({
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   });
 
   /// Creates a new Typst engine with bundled default fonts.
   factory TypstEngine() => RustLib.instance.api.crateApiTypstTypstEngineNew();
+
+  /// Renders a single page of the currently compiled document.
+  Future<RenderResult> renderCachedPage({
+    required BigInt pageIndex,
+    required double pixelPerPt,
+  });
+
+  /// Renders a single page of the currently compiled document as an SVG string.
+  Future<String> renderCachedPageAsSvg({required BigInt pageIndex});
 
   /// Render a single page of a Typst document to raw RGBA pixels.
   ///
@@ -54,6 +74,7 @@ abstract class TypstEngine implements RustOpaqueInterface {
     required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
+    PlatformInt64? sysTime,
   });
 
   /// Renders a single page of a Typst document to PNG bytes.
@@ -72,6 +93,7 @@ abstract class TypstEngine implements RustOpaqueInterface {
     required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
+    PlatformInt64? sysTime,
   });
 }
 
@@ -103,6 +125,46 @@ class RenderResult {
           bytes == other.bytes &&
           width == other.width &&
           height == other.height;
+}
+
+class TypstCompileError implements FrbException {
+  final List<TypstDiagnostic> diagnostics;
+
+  const TypstCompileError({required this.diagnostics});
+
+  @override
+  int get hashCode => diagnostics.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TypstCompileError &&
+          runtimeType == other.runtimeType &&
+          diagnostics == other.diagnostics;
+}
+
+class TypstDiagnostic {
+  final String severity;
+  final String message;
+  final List<String> hints;
+
+  const TypstDiagnostic({
+    required this.severity,
+    required this.message,
+    required this.hints,
+  });
+
+  @override
+  int get hashCode => severity.hashCode ^ message.hashCode ^ hints.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TypstDiagnostic &&
+          runtimeType == other.runtimeType &&
+          severity == other.severity &&
+          message == other.message &&
+          hints == other.hints;
 }
 
 /// Result of a successful PDF compilation.

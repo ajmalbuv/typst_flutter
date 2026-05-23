@@ -57,7 +57,7 @@ print('Generated a ${doc.pageCount}-page PDF (${doc.pdf.length} bytes).');
 
 ### Displaying a live preview widget
 
-The `TypstView` widget automatically recompiles and renders when the source or assets change.
+The `TypstView` widget automatically recompiles and renders when the source or assets change. For scalable vector graphics, use `TypstSvgView`. For multi-page scrollable documents, use `TypstDocumentViewer`.
 
 ```dart
 import 'package:flutter/material.dart';
@@ -66,17 +66,15 @@ import 'package:typst_flutter/typst_flutter.dart';
 class MyEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return TypstView(
+    return TypstDocumentViewer(
       source: r'''
-        = Live Preview
-        Change this text and see the updates instantly.
-        
-        #image("logo.png")
+        = Multi-page Viewer
+        This document spans multiple pages.
+        #pagebreak()
+        And scrolling is instantly fast because the document is cached!
       ''',
-      files: FileSource.assets({
-        'logo.png': 'assets/images/my_logo.png',
-      }),
-      pixelsPerPt: 2.0, // crisp high-DPI rendering
+      useSvg: true, // Use SVG for crisp vector text
+      date: DateTime.now(), // Enable #datetime.today() support
     );
   }
 }

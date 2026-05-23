@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1194713532;
+  int get rustContentHash => -1665335970;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,19 +81,39 @@ abstract class RustLibApi extends BaseApi {
     required List<Uint8List> fontData,
   });
 
+  Future<int> crateApiTypstTypstEngineCompileDocument({
+    required TypstEngine that,
+    required String markup,
+    required List<VirtualFile> files,
+    PlatformInt64? sysTime,
+  });
+
   Future<TypstResult> crateApiTypstTypstEngineCompilePdf({
     required TypstEngine that,
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   });
 
   Future<List<String>> crateApiTypstTypstEngineCompileSvg({
     required TypstEngine that,
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   });
 
   TypstEngine crateApiTypstTypstEngineNew();
+
+  Future<RenderResult> crateApiTypstTypstEngineRenderCachedPage({
+    required TypstEngine that,
+    required BigInt pageIndex,
+    required double pixelPerPt,
+  });
+
+  Future<String> crateApiTypstTypstEngineRenderCachedPageAsSvg({
+    required TypstEngine that,
+    required BigInt pageIndex,
+  });
 
   Future<RenderResult> crateApiTypstTypstEngineRenderPage({
     required TypstEngine that,
@@ -101,6 +121,7 @@ abstract class RustLibApi extends BaseApi {
     required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
+    PlatformInt64? sysTime,
   });
 
   Future<Uint8List> crateApiTypstTypstEngineRenderPageAsPng({
@@ -109,6 +130,7 @@ abstract class RustLibApi extends BaseApi {
     required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
+    PlatformInt64? sysTime,
   });
 
   Future<String> crateApiTypstGetTypstVersion();
@@ -169,10 +191,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<TypstResult> crateApiTypstTypstEngineCompilePdf({
+  Future<int> crateApiTypstTypstEngineCompileDocument({
     required TypstEngine that,
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -184,6 +207,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(markup, serializer);
           sse_encode_list_virtual_file(files, serializer);
+          sse_encode_opt_box_autoadd_i_64(sysTime, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -192,27 +216,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_typst_result,
-          decodeErrorData: sse_decode_String,
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: sse_decode_typst_compile_error,
         ),
-        constMeta: kCrateApiTypstTypstEngineCompilePdfConstMeta,
-        argValues: [that, markup, files],
+        constMeta: kCrateApiTypstTypstEngineCompileDocumentConstMeta,
+        argValues: [that, markup, files, sysTime],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiTypstTypstEngineCompilePdfConstMeta =>
+  TaskConstMeta get kCrateApiTypstTypstEngineCompileDocumentConstMeta =>
       const TaskConstMeta(
-        debugName: "TypstEngine_compile_pdf",
-        argNames: ["that", "markup", "files"],
+        debugName: "TypstEngine_compile_document",
+        argNames: ["that", "markup", "files", "sysTime"],
       );
 
   @override
-  Future<List<String>> crateApiTypstTypstEngineCompileSvg({
+  Future<TypstResult> crateApiTypstTypstEngineCompilePdf({
     required TypstEngine that,
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -224,6 +249,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(markup, serializer);
           sse_encode_list_virtual_file(files, serializer);
+          sse_encode_opt_box_autoadd_i_64(sysTime, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -232,11 +258,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
+          decodeSuccessData: sse_decode_typst_result,
+          decodeErrorData: sse_decode_typst_compile_error,
+        ),
+        constMeta: kCrateApiTypstTypstEngineCompilePdfConstMeta,
+        argValues: [that, markup, files, sysTime],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTypstTypstEngineCompilePdfConstMeta =>
+      const TaskConstMeta(
+        debugName: "TypstEngine_compile_pdf",
+        argNames: ["that", "markup", "files", "sysTime"],
+      );
+
+  @override
+  Future<List<String>> crateApiTypstTypstEngineCompileSvg({
+    required TypstEngine that,
+    required String markup,
+    required List<VirtualFile> files,
+    PlatformInt64? sysTime,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+            that,
+            serializer,
+          );
+          sse_encode_String(markup, serializer);
+          sse_encode_list_virtual_file(files, serializer);
+          sse_encode_opt_box_autoadd_i_64(sysTime, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_list_String,
-          decodeErrorData: sse_decode_String,
+          decodeErrorData: sse_decode_typst_compile_error,
         ),
         constMeta: kCrateApiTypstTypstEngineCompileSvgConstMeta,
-        argValues: [that, markup, files],
+        argValues: [that, markup, files, sysTime],
         apiImpl: this,
       ),
     );
@@ -245,7 +313,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTypstTypstEngineCompileSvgConstMeta =>
       const TaskConstMeta(
         debugName: "TypstEngine_compile_svg",
-        argNames: ["that", "markup", "files"],
+        argNames: ["that", "markup", "files", "sysTime"],
       );
 
   @override
@@ -254,7 +322,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -272,10 +340,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "TypstEngine_new", argNames: []);
 
   @override
-  Future<RenderResult> crateApiTypstTypstEngineRenderPage({
+  Future<RenderResult> crateApiTypstTypstEngineRenderCachedPage({
     required TypstEngine that,
-    required String markup,
-    required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
   }) {
@@ -283,56 +349,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
             that,
             serializer,
           );
-          sse_encode_String(markup, serializer);
-          sse_encode_list_virtual_file(files, serializer);
-          sse_encode_usize(pageIndex, serializer);
-          sse_encode_f_32(pixelPerPt, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 5,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_render_result,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiTypstTypstEngineRenderPageConstMeta,
-        argValues: [that, markup, files, pageIndex, pixelPerPt],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiTypstTypstEngineRenderPageConstMeta =>
-      const TaskConstMeta(
-        debugName: "TypstEngine_render_page",
-        argNames: ["that", "markup", "files", "pageIndex", "pixelPerPt"],
-      );
-
-  @override
-  Future<Uint8List> crateApiTypstTypstEngineRenderPageAsPng({
-    required TypstEngine that,
-    required String markup,
-    required List<VirtualFile> files,
-    required BigInt pageIndex,
-    required double pixelPerPt,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
-            that,
-            serializer,
-          );
-          sse_encode_String(markup, serializer);
-          sse_encode_list_virtual_file(files, serializer);
           sse_encode_usize(pageIndex, serializer);
           sse_encode_f_32(pixelPerPt, serializer);
           pdeCallFfi(
@@ -343,11 +363,148 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeSuccessData: sse_decode_render_result,
           decodeErrorData: sse_decode_String,
         ),
+        constMeta: kCrateApiTypstTypstEngineRenderCachedPageConstMeta,
+        argValues: [that, pageIndex, pixelPerPt],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTypstTypstEngineRenderCachedPageConstMeta =>
+      const TaskConstMeta(
+        debugName: "TypstEngine_render_cached_page",
+        argNames: ["that", "pageIndex", "pixelPerPt"],
+      );
+
+  @override
+  Future<String> crateApiTypstTypstEngineRenderCachedPageAsSvg({
+    required TypstEngine that,
+    required BigInt pageIndex,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+            that,
+            serializer,
+          );
+          sse_encode_usize(pageIndex, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiTypstTypstEngineRenderCachedPageAsSvgConstMeta,
+        argValues: [that, pageIndex],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTypstTypstEngineRenderCachedPageAsSvgConstMeta =>
+      const TaskConstMeta(
+        debugName: "TypstEngine_render_cached_page_as_svg",
+        argNames: ["that", "pageIndex"],
+      );
+
+  @override
+  Future<RenderResult> crateApiTypstTypstEngineRenderPage({
+    required TypstEngine that,
+    required String markup,
+    required List<VirtualFile> files,
+    required BigInt pageIndex,
+    required double pixelPerPt,
+    PlatformInt64? sysTime,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+            that,
+            serializer,
+          );
+          sse_encode_String(markup, serializer);
+          sse_encode_list_virtual_file(files, serializer);
+          sse_encode_usize(pageIndex, serializer);
+          sse_encode_f_32(pixelPerPt, serializer);
+          sse_encode_opt_box_autoadd_i_64(sysTime, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_render_result,
+          decodeErrorData: sse_decode_typst_compile_error,
+        ),
+        constMeta: kCrateApiTypstTypstEngineRenderPageConstMeta,
+        argValues: [that, markup, files, pageIndex, pixelPerPt, sysTime],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTypstTypstEngineRenderPageConstMeta =>
+      const TaskConstMeta(
+        debugName: "TypstEngine_render_page",
+        argNames: [
+          "that",
+          "markup",
+          "files",
+          "pageIndex",
+          "pixelPerPt",
+          "sysTime",
+        ],
+      );
+
+  @override
+  Future<Uint8List> crateApiTypstTypstEngineRenderPageAsPng({
+    required TypstEngine that,
+    required String markup,
+    required List<VirtualFile> files,
+    required BigInt pageIndex,
+    required double pixelPerPt,
+    PlatformInt64? sysTime,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+            that,
+            serializer,
+          );
+          sse_encode_String(markup, serializer);
+          sse_encode_list_virtual_file(files, serializer);
+          sse_encode_usize(pageIndex, serializer);
+          sse_encode_f_32(pixelPerPt, serializer);
+          sse_encode_opt_box_autoadd_i_64(sysTime, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_typst_compile_error,
+        ),
         constMeta: kCrateApiTypstTypstEngineRenderPageAsPngConstMeta,
-        argValues: [that, markup, files, pageIndex, pixelPerPt],
+        argValues: [that, markup, files, pageIndex, pixelPerPt, sysTime],
         apiImpl: this,
       ),
     );
@@ -356,7 +513,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTypstTypstEngineRenderPageAsPngConstMeta =>
       const TaskConstMeta(
         debugName: "TypstEngine_render_page_as_png",
-        argNames: ["that", "markup", "files", "pageIndex", "pixelPerPt"],
+        argNames: [
+          "that",
+          "markup",
+          "files",
+          "pageIndex",
+          "pixelPerPt",
+          "sysTime",
+        ],
       );
 
   @override
@@ -368,7 +532,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 10,
             port: port_,
           );
         },
@@ -414,6 +578,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   TypstEngine
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return TypstEngineImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  TypstEngine
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
     dynamic raw,
   ) {
@@ -428,9 +601,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
+  }
+
+  @protected
   double dco_decode_f_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
   }
 
   @protected
@@ -452,9 +637,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<TypstDiagnostic> dco_decode_list_typst_diagnostic(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_typst_diagnostic).toList();
+  }
+
+  @protected
   List<VirtualFile> dco_decode_list_virtual_file(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_virtual_file).toList();
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
   }
 
   @protected
@@ -467,6 +664,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       bytes: dco_decode_list_prim_u_8_strict(arr[0]),
       width: dco_decode_u_32(arr[1]),
       height: dco_decode_u_32(arr[2]),
+    );
+  }
+
+  @protected
+  TypstCompileError dco_decode_typst_compile_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return TypstCompileError(
+      diagnostics: dco_decode_list_typst_diagnostic(arr[0]),
+    );
+  }
+
+  @protected
+  TypstDiagnostic dco_decode_typst_diagnostic(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return TypstDiagnostic(
+      severity: dco_decode_String(arr[0]),
+      message: dco_decode_String(arr[1]),
+      hints: dco_decode_list_String(arr[2]),
     );
   }
 
@@ -544,6 +765,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   TypstEngine
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return TypstEngineImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  TypstEngine
   sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
     SseDeserializer deserializer,
   ) {
@@ -562,9 +795,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
   double sse_decode_f_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
   }
 
   @protected
@@ -601,6 +846,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<TypstDiagnostic> sse_decode_list_typst_diagnostic(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <TypstDiagnostic>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_typst_diagnostic(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<VirtualFile> sse_decode_list_virtual_file(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -613,12 +872,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   RenderResult sse_decode_render_result(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_bytes = sse_decode_list_prim_u_8_strict(deserializer);
     var var_width = sse_decode_u_32(deserializer);
     var var_height = sse_decode_u_32(deserializer);
     return RenderResult(bytes: var_bytes, width: var_width, height: var_height);
+  }
+
+  @protected
+  TypstCompileError sse_decode_typst_compile_error(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_diagnostics = sse_decode_list_typst_diagnostic(deserializer);
+    return TypstCompileError(diagnostics: var_diagnostics);
+  }
+
+  @protected
+  TypstDiagnostic sse_decode_typst_diagnostic(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_severity = sse_decode_String(deserializer);
+    var var_message = sse_decode_String(deserializer);
+    var var_hints = sse_decode_list_String(deserializer);
+    return TypstDiagnostic(
+      severity: var_severity,
+      message: var_message,
+      hints: var_hints,
+    );
   }
 
   @protected
@@ -700,6 +992,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+    TypstEngine self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as TypstEngineImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
     TypstEngine self,
     SseSerializer serializer,
@@ -718,9 +1023,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
   void sse_encode_f_32(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
   }
 
   @protected
@@ -755,6 +1075,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_typst_diagnostic(
+    List<TypstDiagnostic> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_typst_diagnostic(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_virtual_file(
     List<VirtualFile> self,
     SseSerializer serializer,
@@ -767,11 +1099,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_render_result(RenderResult self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(self.bytes, serializer);
     sse_encode_u_32(self.width, serializer);
     sse_encode_u_32(self.height, serializer);
+  }
+
+  @protected
+  void sse_encode_typst_compile_error(
+    TypstCompileError self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_typst_diagnostic(self.diagnostics, serializer);
+  }
+
+  @protected
+  void sse_encode_typst_diagnostic(
+    TypstDiagnostic self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.severity, serializer);
+    sse_encode_String(self.message, serializer);
+    sse_encode_list_String(self.hints, serializer);
   }
 
   @protected
@@ -849,76 +1214,90 @@ class TypstEngineImpl extends RustOpaque implements TypstEngine {
       .api
       .crateApiTypstTypstEngineAddFonts(that: this, fontData: fontData);
 
-  /// Compile Typst markup to PDF bytes.
+  /// Compile a document and keep it in memory for fast rendering.
   ///
-  /// - [markup]  — Typst source text.
-  /// - [fonts]   — Raw bytes of font files to make available to the compiler.
-  /// - [files]   — Virtual files (images, data files, includes) the markup may
-  ///               reference. Keys must match the paths used in markup exactly.
+  /// Returns the total page count.
+  Future<int> compileDocument({
+    required String markup,
+    required List<VirtualFile> files,
+    PlatformInt64? sysTime,
+  }) => RustLib.instance.api.crateApiTypstTypstEngineCompileDocument(
+    that: this,
+    markup: markup,
+    files: files,
+    sysTime: sysTime,
+  );
+
+  /// Compile Typst markup to PDF bytes.
   Future<TypstResult> compilePdf({
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   }) => RustLib.instance.api.crateApiTypstTypstEngineCompilePdf(
     that: this,
     markup: markup,
     files: files,
+    sysTime: sysTime,
   );
 
   /// Compiles Typst markup to a list of SVG strings (one per page).
   Future<List<String>> compileSvg({
     required String markup,
     required List<VirtualFile> files,
+    PlatformInt64? sysTime,
   }) => RustLib.instance.api.crateApiTypstTypstEngineCompileSvg(
     that: this,
     markup: markup,
     files: files,
+    sysTime: sysTime,
   );
 
+  /// Renders a single page of the currently compiled document.
+  Future<RenderResult> renderCachedPage({
+    required BigInt pageIndex,
+    required double pixelPerPt,
+  }) => RustLib.instance.api.crateApiTypstTypstEngineRenderCachedPage(
+    that: this,
+    pageIndex: pageIndex,
+    pixelPerPt: pixelPerPt,
+  );
+
+  /// Renders a single page of the currently compiled document as an SVG string.
+  Future<String> renderCachedPageAsSvg({required BigInt pageIndex}) =>
+      RustLib.instance.api.crateApiTypstTypstEngineRenderCachedPageAsSvg(
+        that: this,
+        pageIndex: pageIndex,
+      );
+
   /// Render a single page of a Typst document to raw RGBA pixels.
-  ///
-  /// - [markup]       — Typst source text.
-  /// - [files]        — Virtual files the markup may reference.
-  /// - [page_index]   — Zero-based page index.
-  /// - [pixel_per_pt] — Pixels per typographic point (1pt = 1/72 inch).
-  ///                    Use 2.0 for a crisp rendering on 2× displays.
-  ///
-  /// Returns raw RGBA bytes (4 bytes per pixel), plus width and height.
-  /// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into a
-  /// Flutter [ui.Image].
   Future<RenderResult> renderPage({
     required String markup,
     required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
+    PlatformInt64? sysTime,
   }) => RustLib.instance.api.crateApiTypstTypstEngineRenderPage(
     that: this,
     markup: markup,
     files: files,
     pageIndex: pageIndex,
     pixelPerPt: pixelPerPt,
+    sysTime: sysTime,
   );
 
   /// Renders a single page of a Typst document to PNG bytes.
-  ///
-  /// Equivalent to [render_page] but performs the PNG encoding inside Rust,
-  /// using `tiny_skia`'s built-in encoder — no GPU round-trip required.
-  ///
-  /// - [markup]       — Typst source text.
-  /// - [files]        — Virtual files the markup may reference.
-  /// - [page_index]   — Zero-based page index.
-  /// - [pixel_per_pt] — Pixels per typographic point; use 2.0 for HiDPI.
-  ///
-  /// Returns raw PNG bytes (`Vec<u8>`) ready to write to a file or share.
   Future<Uint8List> renderPageAsPng({
     required String markup,
     required List<VirtualFile> files,
     required BigInt pageIndex,
     required double pixelPerPt,
+    PlatformInt64? sysTime,
   }) => RustLib.instance.api.crateApiTypstTypstEngineRenderPageAsPng(
     that: this,
     markup: markup,
     files: files,
     pageIndex: pageIndex,
     pixelPerPt: pixelPerPt,
+    sysTime: sysTime,
   );
 }

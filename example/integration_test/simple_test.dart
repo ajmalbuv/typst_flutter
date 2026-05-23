@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:typst_flutter/typst_flutter.dart';
@@ -31,11 +32,15 @@ void main() {
       expect(doc.pageCount, equals(2));
     });
 
-    test('compile() throws TypstCompileException on invalid markup', () async {
-      await expectLater(
-        () => compiler.compile(source: '#invalid_xyz()'),
-        throwsA(isA<TypstCompileException>()),
-      );
+    test('compile() exposes structured TypstDiagnostic', () async {
+      try {
+        await compiler.compile(source: '#invalid_xyz()');
+        fail('Should have thrown TypstCompileException');
+      } on TypstCompileException catch (e) {
+        expect(e.diagnostics.length, greaterThan(0));
+        expect(e.diagnostics.first.severity, equals('error'));
+        expect(e.diagnostics.first.message, contains('invalid_xyz'));
+      }
     });
 
     test('renderPage() returns raw RGBA pixels', () async {
@@ -56,12 +61,34 @@ void main() {
       expect(doc.pageCount, equals(1));
     });
 
-    testWidgets('TypstView renders without throwing', (tester) async {
+    test('compileDocument() caching works for SVG renders', () async {
+      final count = await compiler.compileDocument(
+        source: '= P1\n#pagebreak()\n= P2',
+        date: DateTime.utc(2025),
+      );
+      expect(count, equals(2));
+
+      final svg0 = await compiler.renderCachedPageAsSvg();
+      expect(svg0, contains('<svg'));
+
+      final svg1 = await compiler.renderCachedPageAsSvg(pageIndex: 1);
+      expect(svg1, contains('<svg'));
+    });
+
+    testWidgets('TypstDocumentViewer renders without throwing', (tester) async {
       await tester.pumpWidget(
-        const TypstView(source: '= Flutter + Typst', pixelsPerPt: 1),
+        MaterialApp(
+          home: Scaffold(
+            body: TypstDocumentViewer(
+              source: '= Flutter + Typst Document Viewer',
+              date: DateTime.now(),
+            ),
+          ),
+        ),
       );
       // Allow async compilation to complete
       await tester.pumpAndSettle(const Duration(seconds: 5));
+      expect(find.byType(TypstDocumentViewer), findsOneWidget);
     });
   });
 }
