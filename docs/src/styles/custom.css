@@ -1,0 +1,38 @@
+/* Catppuccin Mocha & Latte theme for Starlight */
+:root {
+  /* Mocha Base (Dark Mode) */
+  --sl-color-bg: #1e1e2e;
+  --sl-color-bg-nav: #181825;
+  --sl-color-bg-sidebar: #11111b;
+
+  /* Mocha Text */
+  --sl-color-text: #cdd6f4;
+  --sl-color-text-accent: #cba6f7;
+
+  /* Accents */
+  --sl-color-accent: #cba6f7;
+  --sl-color-accent-high: #f5c2e7;
+  --sl-color-accent-low: #313244;
+
+  --sl-color-hairline-shade: #45475a;
+  --sl-color-black: #11111b;
+  --sl-color-white: #cdd6f4;
+}
+
+:root[data-theme='light'] {
+  /* Latte Base (Light Mode) */
+  --sl-color-bg: #eff1f5;
+  --sl-color-bg-nav: #e6e9ef;
+  --sl-color-bg-sidebar: #dce0e8;
+
+  --sl-color-text: #4c4f69;
+  --sl-color-text-accent: #8839ef;
+
+  --sl-color-accent: #8839ef;
+  --sl-color-accent-high: #ea76cb;
+  --sl-color-accent-low: #bcc0cc;
+
+  --sl-color-hairline-shade: #ccd0da;
+  --sl-color-black: #eff1f5;
+  --sl-color-white: #4c4f69;
+}

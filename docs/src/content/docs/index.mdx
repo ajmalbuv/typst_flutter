@@ -1,0 +1,41 @@
+---
+title: Welcome to typst_flutter
+description: Embed the Typst typesetting compiler natively into your Flutter apps via Rust FFI.
+template: splash
+hero:
+  tagline: Embed the Typst typesetting compiler natively into your Flutter apps via Rust FFI. Compile Typst markup to high-quality PDFs or images on mobile and desktop instantly.
+  image:
+    file: ../../assets/houston.webp
+  actions:
+    - text: Get Started
+      link: /typst_flutter/guides/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/ajmalbuv/typst_flutter
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why `typst_flutter`?
+
+<CardGrid stagger>
+  <Card title="Native Performance" icon="rocket">
+    Runs directly on the device using a Rust core, compiling most documents in
+    under 100ms. No WASM overhead, no WebViews, no servers.
+  </Card>
+  <Card title="Zero Configuration" icon="puzzle">
+    Just add the package to your `pubspec.yaml` and click run! The native build
+    systems automatically download the required 15MB prebuilt binaries on the
+    fly.
+  </Card>
+  <Card title="Instant Live Previews" icon="eye">
+    Includes drop-in `TypstDocumentViewer` and `TypstView` widgets that cache
+    compiled pages for butter-smooth scrolling and zooming.
+  </Card>
+  <Card title="Structured Error Handling" icon="approve-check">
+    Get detailed `TypstDiagnostic` error lines when Typst compilation fails,
+    perfect for building in-app editors.
+  </Card>
+</CardGrid>
