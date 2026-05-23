@@ -8,6 +8,7 @@ class TypstDocument {
   const TypstDocument._({
     required this.pageCount,
     this.pdfBytes,
+    this.svgPages,
     Map<int, _PageFrame> frames = const {},
   }) : _frames = frames;
 
@@ -16,6 +17,10 @@ class TypstDocument {
     required Uint8List pdfBytes,
     required int pageCount,
   }) => TypstDocument._(pdfBytes: pdfBytes, pageCount: pageCount);
+
+  /// Creates a [TypstDocument] from compiled SVG strings.
+  factory TypstDocument.fromSvg({required List<String> svgPages}) =>
+      TypstDocument._(svgPages: svgPages, pageCount: svgPages.length);
 
   /// Creates a [TypstDocument] from a single rendered page frame.
   factory TypstDocument.fromFrame({
@@ -32,18 +37,32 @@ class TypstDocument {
   /// The raw PDF bytes of the compiled document.
   final Uint8List? pdfBytes;
 
+  /// The SVG strings for each page of the compiled document.
+  final List<String>? svgPages;
+
   /// The total number of pages in the document.
   final int pageCount;
 
   final Map<int, _PageFrame> _frames;
 
   /// Returns the PDF bytes. Throws [StateError] if this document was
-  /// only rendered as a frame and not compiled to PDF.
+  /// only rendered as a frame or SVG and not compiled to PDF.
   Uint8List get pdf {
     if (pdfBytes == null) {
       throw StateError('PDF bytes not available. Use TypstCompiler.compile().');
     }
     return pdfBytes!;
+  }
+
+  /// Returns the SVG strings for each page. Throws [StateError] if this
+  /// document was not compiled to SVG.
+  List<String> get svgs {
+    if (svgPages == null) {
+      throw StateError(
+        'SVG strings not available. Use TypstCompiler.compileSvg().',
+      );
+    }
+    return svgPages!;
   }
 
   /// Returns a Flutter [ui.Image] for the given [pageIndex].

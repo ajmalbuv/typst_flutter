@@ -81,10 +81,7 @@ Options:
 // ── Artifact definitions ─────────────────────────────────────────────────────
 
 class _Artifact {
-  const _Artifact({
-    required this.filename,
-    required this.destination,
-  });
+  const _Artifact({required this.filename, required this.destination});
 
   /// Filename as published on GitHub Releases.
   final String filename;

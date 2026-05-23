@@ -2883,6 +2883,7 @@ dependencies = [
  "typst",
  "typst-pdf",
  "typst-render",
+ "typst-svg",
 ]
 
 [[package]]

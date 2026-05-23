@@ -74,7 +74,7 @@ impl TypstEngine {
         files: Vec<VirtualFile>,
     ) -> Result<TypstResult, String> {
         self.world.set_markup(markup);
-        self.world.add_files(files);
+        self.world.set_files(files);
 
         let document: PagedDocument = typst::compile(&self.world)
             .output
@@ -91,15 +91,14 @@ impl TypstEngine {
     /// Render a single page of a Typst document to raw RGBA pixels.
     ///
     /// - [markup]       — Typst source text.
-    /// - [fonts]        — Raw bytes of font files.
     /// - [files]        — Virtual files the markup may reference.
     /// - [page_index]   — Zero-based page index.
     /// - [pixel_per_pt] — Pixels per typographic point (1pt = 1/72 inch).
     ///                    Use 2.0 for a crisp rendering on 2× displays.
     ///
     /// Returns raw RGBA bytes (4 bytes per pixel), plus width and height.
-    /// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into
-    /// a [ui.Image].
+    /// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into a
+    /// Flutter [ui.Image].
     pub fn render_page(
         &mut self,
         markup: String,
@@ -108,7 +107,7 @@ impl TypstEngine {
         pixel_per_pt: f32,
     ) -> Result<RenderResult, String> {
         self.world.set_markup(markup);
-        self.world.add_files(files);
+        self.world.set_files(files);
 
         let document: PagedDocument = typst::compile(&self.world)
             .output
@@ -130,7 +129,69 @@ impl TypstEngine {
             height: canvas.height(),
         })
     }
+
+    /// Compiles Typst markup to a list of SVG strings (one per page).
+    pub fn compile_svg(
+        &mut self,
+        markup: String,
+        files: Vec<VirtualFile>,
+    ) -> Result<Vec<String>, String> {
+        self.world.set_markup(markup);
+        self.world.set_files(files);
+
+        let document: PagedDocument = typst::compile(&self.world)
+            .output
+            .map_err(|errs| format_errors(&errs))?;
+
+        let mut svgs = Vec::new();
+        for page in &document.pages {
+            svgs.push(typst_svg::svg(page));
+        }
+
+        Ok(svgs)
+    }
+
+    /// Renders a single page of a Typst document to PNG bytes.
+    ///
+    /// Equivalent to [render_page] but performs the PNG encoding inside Rust,
+    /// using `tiny_skia`'s built-in encoder — no GPU round-trip required.
+    ///
+    /// - [markup]       — Typst source text.
+    /// - [files]        — Virtual files the markup may reference.
+    /// - [page_index]   — Zero-based page index.
+    /// - [pixel_per_pt] — Pixels per typographic point; use 2.0 for HiDPI.
+    ///
+    /// Returns raw PNG bytes (`Vec<u8>`) ready to write to a file or share.
+    pub fn render_page_as_png(
+        &mut self,
+        markup: String,
+        files: Vec<VirtualFile>,
+        page_index: usize,
+        pixel_per_pt: f32,
+    ) -> Result<Vec<u8>, String> {
+        self.world.set_markup(markup);
+        self.world.set_files(files);
+
+        let document: PagedDocument = typst::compile(&self.world)
+            .output
+            .map_err(|errs| format_errors(&errs))?;
+
+        if page_index >= document.pages.len() {
+            return Err(format!(
+                "Page index {page_index} out of bounds (document has {} page(s))",
+                document.pages.len()
+            ));
+        }
+
+        let page = &document.pages[page_index];
+        let canvas = typst_render::render(page, pixel_per_pt);
+
+        canvas
+            .encode_png()
+            .map_err(|e| format!("PNG encoding failed: {e}"))
+    }
 }
+
 
 // ── SimpleWorld — in-memory Typst World implementation ───────────────────────
 
@@ -182,7 +243,13 @@ impl SimpleWorld {
         self.source = Source::new(self.source.id(), markup);
     }
 
-    fn add_files(&mut self, virtual_files: Vec<VirtualFile>) {
+    /// Replaces the entire virtual file system for the next compilation.
+    ///
+    /// The VFS is reset on every call so that stale files from a previous
+    /// compilation do not bleed into the next one. Callers pass the complete
+    /// desired file set each time (an empty `virtual_files` means no files).
+    fn set_files(&mut self, virtual_files: Vec<VirtualFile>) {
+        self.files.clear();
         for vf in virtual_files {
             let normalised = vf.path.replace('\\', "/");
             self.files.insert(normalised, Bytes::new(vf.bytes));
@@ -203,8 +270,25 @@ impl typst::World for SimpleWorld {
         self.source.id()
     }
 
-    fn source(&self, _id: FileId) -> Result<Source, FileError> {
-        Ok(self.source.clone())
+    fn source(&self, id: FileId) -> Result<Source, FileError> {
+        // Fast path: the main file.
+        if id == self.source.id() {
+            return Ok(self.source.clone());
+        }
+
+        // Included `.typ` files: look them up in the virtual file system,
+        // parse the bytes as UTF-8, and return a fresh Source.
+        let vpath = id.vpath().as_rootless_path();
+        let key = vpath.to_string_lossy().replace('\\', "/");
+
+        match self.files.get(&key) {
+            Some(bytes) => {
+                let text = std::str::from_utf8(bytes)
+                    .map_err(|_| FileError::InvalidUtf8)?;
+                Ok(Source::new(id, text.to_string()))
+            }
+            None => Err(FileError::NotFound(vpath.into())),
+        }
     }
 
     fn font(&self, index: usize) -> Option<Font> {

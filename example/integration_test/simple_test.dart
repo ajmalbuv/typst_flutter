@@ -49,6 +49,13 @@ void main() {
       expect(result.bytes.length, equals(result.width * result.height * 4));
     });
 
+    test('compileSvg() produces valid SVG strings', () async {
+      final doc = await compiler.compileSvg(source: '= Hello, Typst!');
+      expect(doc.svgs, isNotEmpty);
+      expect(doc.svgs.first, contains('<svg'));
+      expect(doc.pageCount, equals(1));
+    });
+
     testWidgets('TypstView renders without throwing', (tester) async {
       await tester.pumpWidget(
         const TypstView(source: '= Flutter + Typst', pixelsPerPt: 1),

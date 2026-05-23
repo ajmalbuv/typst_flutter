@@ -113,6 +113,44 @@ $ integral_0^infinity e^(-x^2) dif x = sqrt(pi) / 2 $
     }
   }
 
+  Future<void> _handleExport(String format) async {
+    if (!_isCompilerReady) return;
+
+    setState(() => _isCompiling = true);
+
+    try {
+      final compiler = await _compilerFuture;
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+
+      if (format == 'pdf') {
+        final doc = await compiler.compile(source: _controller.text);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('PDF Generated: ${doc.pdf.length} bytes'),
+            backgroundColor: const Color(0xFFA6E3A1),
+          ),
+        );
+      } else if (format == 'svg') {
+        final doc = await compiler.compileSvg(source: _controller.text);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('SVG Generated: ${doc.svgs.length} page(s)'),
+            backgroundColor: const Color(0xFFFAB387),
+          ),
+        );
+      }
+    } on Object catch (e) {
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCompiling = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -121,12 +159,34 @@ $ integral_0^infinity e^(-x^2) dif x = sqrt(pi) / 2 $
         backgroundColor: const Color(0xFF1E1E2E),
         foregroundColor: const Color(0xFFCDD6F4),
         actions: [
-          if (_isCompilerReady)
+          if (_isCompilerReady) ...[
             IconButton(
               onPressed: _isCompiling ? null : _compile,
               icon: const Icon(Icons.play_arrow),
               tooltip: 'Compile',
             ),
+            PopupMenuButton<String>(
+              onSelected: _handleExport,
+              icon: const Icon(Icons.download),
+              tooltip: 'Export',
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'pdf',
+                  child: ListTile(
+                    leading: Icon(Icons.picture_as_pdf),
+                    title: Text('Export PDF'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'svg',
+                  child: ListTile(
+                    leading: Icon(Icons.code),
+                    title: Text('Export SVG'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
       body: Column(
