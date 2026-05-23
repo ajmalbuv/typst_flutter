@@ -46,7 +46,7 @@ final doc = await compiler.compile(
   source: r'''
     #set page(width: 148mm, height: 210mm, margin: 1cm)
     = Hello Typst!
-    
+
     This is rendered *natively* in Flutter.
   ''',
 );
@@ -59,7 +59,7 @@ print('Generated a ${doc.pageCount}-page PDF (${doc.pdf.length} bytes).');
 
 The `TypstView` widget automatically recompiles and renders when the source or assets change. For scalable vector graphics, use `TypstSvgView`. For multi-page scrollable documents, use `TypstDocumentViewer`.
 
-```dart
+````dart
 import 'package:flutter/material.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
@@ -86,7 +86,8 @@ Because this package relies on native Rust libraries via FFI, tests must be run 
 1. Ensure you have downloaded the native binaries for your host machine:
    ```bash
    dart run typst_flutter:setup
-   ```
+````
+
 2. Run the integration tests using the flutter test command:
    ```bash
    flutter test integration_test/simple_test.dart

@@ -183,7 +183,7 @@ class _Setup {
     }
 
     // Write version stamp
-    final versionPath = p.join(_packageRoot, _versionFile);
+    final versionPath = p.join(_packageRoot, _prebuiltDir, '.version');
     File(versionPath).writeAsStringSync(_version);
 
     print('');
@@ -204,7 +204,11 @@ class _Setup {
   Future<void> _downloadArtifact(_Artifact artifact) async {
     final url =
         'https://github.com/$_repoOwner/$_repoName/releases/download/v$_version/${artifact.filename}';
-    final destPath = p.join(_packageRoot, _prebuiltDir, artifact.destination);
+    final destPath = p.join(
+      _packageRoot,
+      _prebuiltDir,
+      p.joinAll(artifact.destination.split('/')),
+    );
 
     print('⟳ ${artifact.filename}');
 

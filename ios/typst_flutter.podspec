@@ -33,6 +33,11 @@ Pod::Spec.new do |s|
     __dir__, '../.typst_flutter_prebuilt/ios/typst_flutter.xcframework'
   )
 
+  if !File.exist?(prebuilt_xcframework)
+    puts "typst_flutter: Auto-downloading prebuilt native libraries..."
+    system("cd '#{File.expand_path('..', __dir__)}' && dart run typst_flutter:setup")
+  end
+
   if File.exist?(prebuilt_xcframework)
     # ── Pre-built path ────────────────────────────────────────────────────────
     s.vendored_frameworks = prebuilt_xcframework

@@ -41,8 +41,11 @@ apply plugin: 'com.android.library'
 
 def pluginRoot = project.projectDir.parentFile
 def prebuiltDir = new File(pluginRoot, '.typst_flutter_prebuilt/android')
+def localJniLibsDir = new File(project.projectDir, 'src/main/jniLibs/arm64-v8a')
 
-def usePrebuilt = prebuiltDir.exists()
+def hasLocalBinaries = localJniLibsDir.exists()
+def hasPrebuiltBinaries = prebuiltDir.exists()
+def usePrebuilt = hasLocalBinaries || hasPrebuiltBinaries
 
 android {
     if (project.android.hasProperty('namespace')) {
@@ -61,10 +64,30 @@ android {
         minSdkVersion 21
     }
 
-    if (usePrebuilt) {
+    if (!hasLocalBinaries && !hasPrebuiltBinaries) {
+        logger.lifecycle('typst_flutter: Auto-downloading prebuilt native libraries...')
+        try {
+            exec {
+                workingDir pluginRoot
+                def isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
+                if (isWindows) {
+                    commandLine 'cmd', '/c', 'dart run typst_flutter:setup'
+                } else {
+                    commandLine 'sh', '-c', 'dart run typst_flutter:setup'
+                }
+                ignoreExitValue true
+            }
+            hasPrebuiltBinaries = prebuiltDir.exists()
+            usePrebuilt = hasLocalBinaries || hasPrebuiltBinaries
+        } catch (Exception e) {
+            logger.lifecycle('typst_flutter: Auto-download failed. ' + e.message)
+        }
+    }
+
+    if (!hasLocalBinaries && hasPrebuiltBinaries) {
         sourceSets {
             main {
-                jniLibs.srcDirs = [prebuiltDir.absolutePath]
+                jniLibs.srcDirs += [prebuiltDir.absolutePath]
             }
         }
     }
@@ -80,9 +103,14 @@ if (!usePrebuilt) {
     │    dart run typst_flutter:setup                                  │
     └──────────────────────────────────────────────────────────────────┘
     ''')
-    apply from: '../rust_builder/cargokit/gradle/plugin.gradle'
-    cargokit {
-        manifestDir = '../rust'
-        libname = 'typst_flutter'
+    def cargokitScript = new File(project.projectDir, '../rust_builder/cargokit/gradle/plugin.gradle')
+    if (cargokitScript.exists()) {
+        apply from: cargokitScript.absolutePath
+        cargokit {
+            manifestDir = '../rust'
+            libname = 'typst_flutter'
+        }
+    } else {
+        throw new GradleException("typst_flutter: Prebuilt binaries are missing, auto-download failed, AND Cargokit is missing from rust_builder. Please run `flutter_rust_bridge_codegen integrate` to restore Cargokit, or connect to the internet to allow auto-download.")
     }
 }
