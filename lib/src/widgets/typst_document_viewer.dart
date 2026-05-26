@@ -143,23 +143,21 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
       itemCount: _pageCount,
       separatorBuilder: (context, index) =>
           SizedBox(height: widget.pageSpacing),
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: widget.pageSpacing),
-          child: Card(
-            elevation: widget.pageElevation,
-            color: widget.pageColor,
-            clipBehavior: Clip.antiAlias,
-            margin: EdgeInsets.zero,
-            child: _TypstPageRenderer(
-              compiler: _compiler!,
-              pageIndex: index,
-              useSvg: widget.useSvg,
-              pixelsPerPt: widget.pixelsPerPt,
-            ),
+      itemBuilder: (context, index) => Padding(
+        padding: EdgeInsets.symmetric(horizontal: widget.pageSpacing),
+        child: Card(
+          elevation: widget.pageElevation,
+          color: widget.pageColor,
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          child: _TypstPageRenderer(
+            compiler: _compiler!,
+            pageIndex: index,
+            useSvg: widget.useSvg,
+            pixelsPerPt: widget.pixelsPerPt,
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

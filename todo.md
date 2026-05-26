@@ -111,23 +111,16 @@ The compiler holds a native Rust resource (`TypstEngine`). There's no `dispose()
 
 ---
 
-### 10. `GEMINI.md` is committed to the repo root
-
-Minor but visible: there's a `GEMINI.md` file in the root (likely an AI assistant config/context file). This is a public repo and it shows up in the file listing. It doesn't affect functionality but looks unprofessional on a published package. Add it to `.pubignore` and `.gitignore`, or delete it.
-
----
-
 **Summary by severity:**
 
-| Issue                                      | Severity    |
-| ------------------------------------------ | ----------- |
-| Implicit shared state in `compileDocument` | 🔴 High     |
-| No `dispose()` on `TypstCompiler`          | 🔴 High     |
-| `TypstDocument` not a sealed class         | 🟠 Medium   |
-| Per-widget compiler in `TypstView`         | 🟠 Medium   |
-| `errorBuilder` typed as `Object`           | 🟠 Medium   |
-| `engine` publicly exposed                  | 🟡 Low      |
-| `FontSource.load()` publicly exposed       | 🟡 Low      |
-| Redundant widget pair                      | 🟡 Low      |
-| Async/sync dimension mismatch              | 🟡 Low      |
-| `GEMINI.md` in repo root                   | ⚪ Cosmetic |
+| Issue                                      | Severity  |
+| ------------------------------------------ | --------- |
+| Implicit shared state in `compileDocument` | 🔴 High   |
+| No `dispose()` on `TypstCompiler`          | 🔴 High   |
+| `TypstDocument` not a sealed class         | 🟠 Medium |
+| Per-widget compiler in `TypstView`         | 🟠 Medium |
+| `errorBuilder` typed as `Object`           | 🟠 Medium |
+| `engine` publicly exposed                  | 🟡 Low    |
+| `FontSource.load()` publicly exposed       | 🟡 Low    |
+| Redundant widget pair                      | 🟡 Low    |
+| Async/sync dimension mismatch              | 🟡 Low    |

@@ -36,13 +36,11 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
     required BigInt pageIndex,
     required double pixelPerPt,
     PlatformInt64? sysTime,
-  }) async {
-    return api.RenderResult(
-      bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
-      width: 100,
-      height: 100,
-    );
-  }
+  }) async => api.RenderResult(
+    bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
+    width: 100,
+    height: 100,
+  );
 
   @override
   Future<void> addFonts({required List<Uint8List> fontData}) async {}
@@ -51,9 +49,7 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
 /// A manual "Fake" implementation of the Rust API.
 class FakeRustLibApi extends Fake implements RustLibApi {
   @override
-  api.TypstEngine crateApiTypstTypstEngineNew() {
-    return FakeTypstEngine();
-  }
+  api.TypstEngine crateApiTypstTypstEngineNew() => FakeTypstEngine();
 
   @override
   Future<String> crateApiTypstGetTypstVersion() async => '0.11.0-test';

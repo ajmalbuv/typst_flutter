@@ -1,4 +1,6 @@
-include: package:very_good_analysis/analysis_options.yaml
+include:
+  - package:very_good_analysis/analysis_options.yaml
+
 analyzer:
   strong-mode:
     implicit-dynamic: false
@@ -9,9 +11,13 @@ analyzer:
     - lib/src/rust/frb_generated.io.dart
     - lib/src/rust/frb_generated.web.dart
     - lib/src/rust/api/typst.dart
+    - "build/**"
+    - "**/*.g.dart"
 
 formatter:
   page_width: 80
   trailing_commas: automate
 
 linter:
+  rules:
+    prefer_expression_function_bodies: true

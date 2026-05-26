@@ -197,35 +197,30 @@ class _TypstSvgViewState extends State<TypstSvgView> {
     );
   }
 
-  Widget _buildLoading(BuildContext context) {
-    return widget.loadingBuilder != null
-        ? widget.loadingBuilder!(context)
-        : const Center(child: CircularProgressIndicator());
-  }
+  Widget _buildLoading(BuildContext context) => widget.loadingBuilder != null
+      ? widget.loadingBuilder!(context)
+      : const Center(child: CircularProgressIndicator());
 
-  Widget _buildError(BuildContext context, Object error) {
-    return widget.errorBuilder != null
-        ? widget.errorBuilder!(context, error)
-        : _DefaultErrorView(error: error);
-  }
+  Widget _buildError(BuildContext context, Object error) =>
+      widget.errorBuilder != null
+      ? widget.errorBuilder!(context, error)
+      : _DefaultErrorView(error: error);
 }
 
 class _SmallLoadingIndicator extends StatelessWidget {
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const SizedBox(
-        width: 16,
-        height: 16,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(6),
+    decoration: BoxDecoration(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: const SizedBox(
+      width: 16,
+      height: 16,
+      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+    ),
+  );
 }
 
 class _ErrorBanner extends StatelessWidget {
@@ -233,18 +228,16 @@ class _ErrorBanner extends StatelessWidget {
   final Object error;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.red.withValues(alpha: 0.85),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Text(
-        error.toString(),
-        style: const TextStyle(color: Colors.white, fontSize: 12),
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    color: Colors.red.withValues(alpha: 0.85),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    child: Text(
+      error.toString(),
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+    ),
+  );
 }
 
 class _DefaultErrorView extends StatelessWidget {
@@ -252,24 +245,22 @@ class _DefaultErrorView extends StatelessWidget {
   final Object error;
 
   @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFFFF3F3),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 32),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red, fontSize: 13),
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xFFFFF3F3),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            error.toString(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red, fontSize: 13),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
