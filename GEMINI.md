@@ -98,7 +98,7 @@ typst_flutter/                  ← Flutter FFI plugin (pub.dev package root)
 │       └── release.yml         ← CI: cross-compile + GitHub Release + pub.dev publish
 │
 ├── pubspec.yaml
-├── GEMINI.md                   ← YOU ARE HERE
+├── GEMINI.md                   ← YOU ARE HERE (ignored for pub.dev)
 └── README.md
 ```
 
@@ -462,10 +462,6 @@ but for the Flutter ecosystem.
 - typst-render crate: https://docs.rs/typst-render
 - typst.ts (web equivalent): https://github.com/Myriad-Dreamin/typst.ts
 - dart:ffi docs: https://dart.dev/guides/libraries/c-interop
-- Flutter FFI plugin guide: https://docs.flutter.dev/platform-integration/android/c-interop
-- pub.dev package: https://pub.dev/packages/typst_flutter
-- GitHub repo: https://github.com/ajmalbuv/typst_flutter
-s/libraries/c-interop
 - Flutter FFI plugin guide: https://docs.flutter.dev/platform-integration/android/c-interop
 - pub.dev package: https://pub.dev/packages/typst_flutter (not yet published)
 - GitHub repo: https://github.com/ajmalbuv/typst_flutter

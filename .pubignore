@@ -1,6 +1,18 @@
 # Pub ignores native binary artifacts since they are downloaded by the setup script
 # or built locally by Cargokit, and are way over the pub.dev 100MB limit.
 
+# Internal & Maintenance
+.github/
+.vscode/
+.metadata
+justfile
+GEMINI.md
+todo.md
+RELEASE_PROCESS.md
+
+# Large Documentation Source
+docs/
+
 # Ignore any platform-specific built libraries
 android/src/main/jniLibs/
 ios/Frameworks/
