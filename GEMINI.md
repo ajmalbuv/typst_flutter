@@ -210,6 +210,8 @@ After all jobs complete:
 - [x] Verified Android build (`aarch64-linux-android`)
 - [x] `.github/workflows/release.yml` — full CI pipeline
 - [x] `bin/setup.dart` — binary downloader with checksum verification
+- [x] Added `ci.yml` — automated linting, formatting, and tests (Dart/Rust)
+- [x] Added Rust unit tests for core compiler and VFS logic
 
 ### Immediately needed
 
@@ -376,16 +378,14 @@ TypstView(
 - **Error handling**: Typed exceptions (`TypstCompileException`) not error strings.
   Never swallow errors silently.
 
-- **Async**: Every call that touches native code goes through `Isolate.run`.
+- **Async**: Every call that touches native code goes through background isolates (managed automatically by FRB v2).
   The public API is fully async. Never call FFI functions on the UI thread.
 
-- **Memory**: Rust owns all allocations. Dart copies bytes out then immediately
-  calls `typst_free_buf`. Never hold onto a `TypstBuf` longer than needed.
+- **Memory**: Managed by FRB v2. Safe serialization across the FFI boundary.
 
 - **Formatting**: `dart format` enforced. Rust: `cargo fmt` enforced.
 
-- **No flutter_rust_bridge**: The FFI surface is intentionally small.
-  Manual FFI is preferred for transparency and to avoid heavy codegen deps.
+- **Using flutter_rust_bridge**: We use FRB v2 for safe, efficient, and easy-to-maintain FFI. It handles complex data types and background isolates automatically.
 
 - **Catppuccin Mocha** color palette used in example app UI and any
   documentation visuals (consistent with author's personal brand).
@@ -461,6 +461,10 @@ but for the Flutter ecosystem.
 - typst-render crate: https://docs.rs/typst-render
 - typst.ts (web equivalent): https://github.com/Myriad-Dreamin/typst.ts
 - dart:ffi docs: https://dart.dev/guides/libraries/c-interop
+- Flutter FFI plugin guide: https://docs.flutter.dev/platform-integration/android/c-interop
+- pub.dev package: https://pub.dev/packages/typst_flutter
+- GitHub repo: https://github.com/ajmalbuv/typst_flutter
+s/libraries/c-interop
 - Flutter FFI plugin guide: https://docs.flutter.dev/platform-integration/android/c-interop
 - pub.dev package: https://pub.dev/packages/typst_flutter (not yet published)
 - GitHub repo: https://github.com/ajmalbuv/typst_flutter

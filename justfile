@@ -40,4 +40,13 @@ get:
 gen:
     flutter_rust_bridge_codegen generate
 # Full preparation for a PR
-prep: fmt fix get gen
+prep: fmt fix get gen test-rust lint-rust
+# Rust linting with clippy
+lint-rust:
+    cd rust {{ and }} cargo clippy --all-targets --all-features -- -D warnings
+# Rust format check
+fmt-rust:
+    cd rust {{ and }} cargo fmt --all -- --check
+# Rust dependency audit
+audit-rust:
+    cd rust {{ and }} cargo audit
