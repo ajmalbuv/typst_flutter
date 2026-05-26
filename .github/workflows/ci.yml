@@ -15,6 +15,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
+          cache: true
       - name: Install dependencies
         run: flutter pub get
       - name: Check format
@@ -29,6 +30,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - uses: swatinem/rust-cache@v2
+        with:
+          working-directory: rust
       - name: Check format
         run: cargo fmt --all -- --check
         working-directory: rust
@@ -48,6 +52,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
+          cache: true
       - name: Install dependencies
         run: flutter pub get
       - name: Run tests
@@ -58,6 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          working-directory: rust
       - name: Run tests
         run: cargo test
         working-directory: rust

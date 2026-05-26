@@ -9,7 +9,7 @@ and := if os() == "windows" { ";" } else { "&&" }
 
 # Dart format all relevant directories
 fmt:
-    dart format lib example rust_builder bin
+    dart format .
 # Apply Dart fixes
 fix:
     dart fix --apply

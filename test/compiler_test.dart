@@ -1,4 +1,3 @@
-
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typst_flutter/src/rust/api/typst.dart' as api;
@@ -14,13 +13,15 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
     PlatformInt64? sysTime,
   }) async {
     if (markup == 'error') {
-      throw const api.TypstCompileError(diagnostics: [
-        api.TypstDiagnostic(
-          severity: 'error',
-          message: 'Simulated error',
-          hints: [],
-        )
-      ]);
+      throw const api.TypstCompileError(
+        diagnostics: [
+          api.TypstDiagnostic(
+            severity: 'error',
+            message: 'Simulated error',
+            hints: [],
+          ),
+        ],
+      );
     }
     return api.TypstResult(
       bytes: Uint8List.fromList([1, 2, 3, 4]),
@@ -87,11 +88,13 @@ void main() {
 
       expect(
         () => compiler.compile(source: 'error'),
-        throwsA(isA<TypstCompileException>().having(
-          (e) => e.message,
-          'message',
-          contains('Compilation failed'),
-        )),
+        throwsA(
+          isA<TypstCompileException>().having(
+            (e) => e.message,
+            'message',
+            contains('Compilation failed'),
+          ),
+        ),
       );
     });
 
