@@ -210,6 +210,7 @@ After all jobs complete:
 - [x] Verified Android build (`aarch64-linux-android`)
 - [x] `.github/workflows/release.yml` — full CI pipeline
 - [x] `bin/setup.dart` — binary downloader with checksum verification
+- [x] **Unit Test Harness** — Mock native API for host-side testing (`test/compiler_test.dart`)
 - [x] Added `ci.yml` — automated linting, formatting, and tests (Dart/Rust)
 - [x] Added Rust unit tests for core compiler and VFS logic
 
