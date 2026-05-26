@@ -9,7 +9,7 @@ and := if os() == "windows" { ";" } else { "&&" }
 
 # Dart format all relevant directories
 fmt:
-    dart format lib example rust_builder bin
+    dart format .
 # Apply Dart fixes
 fix:
     dart fix --apply
@@ -25,6 +25,9 @@ clean-deep: clean
 # Build for all 4 Android architectures and copy to jniLibs
 build-android:
     {{ if os() == "windows" { "$targets = @('aarch64-linux-android', 'armv7-linux-androideabi', 'i686-linux-android', 'x86_64-linux-android'); " + "$abis = @('arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'); " + "for ($i=0; $i -lt $targets.Length; $i++) { " + "Write-Host \"Building for $($targets[$i])...\"; " + "cd rust; cargo ndk -t $($targets[$i]) build --release; cd ..; " + "$src = \"rust/target/$($targets[$i])/release/libtypst_flutter.so\"; " + "$dest = \"android/src/main/jniLibs/$($abis[$i])/\"; " + "if (!(Test-Path $dest)) { New-Item -ItemType Directory -Force -Path $dest | Out-Null }; " + "if (Test-Path $src) { " + "Copy-Item -Path $src -Destination $dest -Force; " + "Write-Host \"  [OK] Copied to $dest\"; " + "} else { " + "Write-Error \"  [ERROR] File not found: $src\"; " + "}" + "}" } else { "targets=('aarch64-linux-android' 'armv7-linux-androideabi' 'i686-linux-android' 'x86_64-linux-android'); " + "abis=('arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'); " + "for i in \"${!targets[@]}\"; do " + "echo \"Building for ${targets[$i]}...\"; " + "(cd rust && cargo ndk -t ${targets[$i]} build --release); " + "src=\"rust/target/${targets[$i]}/release/libtypst_flutter.so\"; " + "dest=\"android/src/main/jniLibs/${abis[$i]}/\"; " + "mkdir -p \"$dest\"; " + "if [ -f \"$src\" ]; then " + "cp \"$src\" \"$dest\"; " + "echo \"  [OK] Copied to $dest\"; " + "else " + "echo \"  [ERROR] File not found: $src\"; " + "fi; " + "done" } }}
+# Run Dart tests with expanded output
+test:
+    flutter test -r expanded
 # Run integration tests (crucial for FFI)
 test-integration:
     cd example {{ and }} flutter test integration_test/simple_test.dart
@@ -40,4 +43,13 @@ get:
 gen:
     flutter_rust_bridge_codegen generate
 # Full preparation for a PR
-prep: fmt fix get gen
+prep: fmt fix get gen test-rust lint-rust
+# Rust linting with clippy
+lint-rust:
+    cd rust {{ and }} cargo clippy --all-targets --all-features -- -D warnings
+# Rust format check
+fmt-rust:
+    cd rust {{ and }} cargo fmt --all -- --check
+# Rust dependency audit
+audit-rust:
+    cd rust {{ and }} cargo audit

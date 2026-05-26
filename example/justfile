@@ -1,0 +1,32 @@
+# example/justfile
+
+set shell := ["sh", "-c"]
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+
+# Chaining operator
+# and := if os() == "windows" { ";" } else { "&&" }
+
+# Get dependencies
+get:
+    flutter pub get
+# Run the app
+run:
+    flutter run
+# Run integration tests
+test-integration:
+    flutter test integration_test/simple_test.dart
+# Build android
+build-android:
+    flutter build apk --release
+# Clean example project
+clean:
+    flutter clean
+# Fix Dart code
+fix:
+    dart fix --apply
+# Format Dart code
+fmt:
+    dart format lib example rust_builder bin
+# fix and format
+prep:
+    fix fmt

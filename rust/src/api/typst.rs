@@ -16,6 +16,7 @@ use typst::{Library, LibraryExt};
 /// The [path] must match exactly the path used in Typst markup.
 /// For example, if the markup contains `#image("logo.png")`, the path
 /// must be `"logo.png"`.
+#[derive(Debug, Clone)]
 pub struct VirtualFile {
     /// The virtual path as referenced in Typst markup.
     pub path: String,
@@ -24,6 +25,7 @@ pub struct VirtualFile {
 }
 
 /// Result of a successful PDF compilation.
+#[derive(Debug, Clone)]
 pub struct TypstResult {
     /// Raw PDF bytes.
     pub bytes: Vec<u8>,
@@ -32,6 +34,7 @@ pub struct TypstResult {
 }
 
 /// Result of rendering a single page.
+#[derive(Debug, Clone)]
 pub struct RenderResult {
     /// Raw RGBA pixel data (4 bytes per pixel, row-major).
     pub bytes: Vec<u8>,
@@ -106,7 +109,7 @@ impl TypstEngine {
     ) -> Result<RenderResult, String> {
         let doc = self.document.as_ref().ok_or("Document not compiled")?;
         if page_index >= doc.pages.len() {
-            return Err(format!("Page index out of bounds"));
+            return Err("Page index out of bounds".to_string());
         }
         let page = &doc.pages[page_index];
         let canvas = typst_render::render(page, pixel_per_pt);
@@ -121,7 +124,7 @@ impl TypstEngine {
     pub fn render_cached_page_as_svg(&self, page_index: usize) -> Result<String, String> {
         let doc = self.document.as_ref().ok_or("Document not compiled")?;
         if page_index >= doc.pages.len() {
-            return Err(format!("Page index out of bounds"));
+            return Err("Page index out of bounds".to_string());
         }
         let page = &doc.pages[page_index];
         Ok(typst_svg::svg(page))
@@ -207,7 +210,7 @@ impl TypstEngine {
             return Err(TypstCompileError {
                 diagnostics: vec![TypstDiagnostic {
                     severity: "error".to_string(),
-                    message: format!("Page index out of bounds"),
+                    message: "Page index out of bounds".to_string(),
                     hints: vec![],
                 }],
             });
@@ -378,4 +381,63 @@ pub fn get_typst_version() -> String {
         patch: 2,
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_engine_initialization() {
+        let engine = TypstEngine::new();
+        // Check that bundled fonts are loaded
+        assert!(engine.world.fonts.len() >= 3);
+        assert!(engine.document.is_none());
+    }
+
+    #[test]
+    fn test_vfs_normalization() {
+        let mut world = SimpleWorld::new();
+        let files = vec![VirtualFile {
+            path: "subdir\\test.typ".to_string(),
+            bytes: b"= Test".to_vec(),
+        }];
+        world.set_files(files);
+        // Backslashes should be normalized to forward slashes
+        assert!(world.files.contains_key("subdir/test.typ"));
+        assert_eq!(
+            world.files.get("subdir/test.typ").unwrap().as_slice(),
+            b"= Test"
+        );
+    }
+
+    #[test]
+    fn test_basic_compilation() {
+        let mut engine = TypstEngine::new();
+        let result = engine.compile_pdf("= Hello".to_string(), vec![], None);
+        assert!(result.is_ok());
+        let pdf = result.unwrap();
+        assert!(!pdf.bytes.is_empty());
+        assert_eq!(pdf.page_count, 1);
+    }
+
+    #[test]
+    fn test_compile_error() {
+        let mut engine = TypstEngine::new();
+        let result = engine.compile_pdf("#invalid_call()".to_string(), vec![], None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(!err.diagnostics.is_empty());
+        assert_eq!(err.diagnostics[0].severity, "error");
+    }
+
+    #[test]
+    fn test_svg_export() {
+        let mut engine = TypstEngine::new();
+        let result = engine.compile_svg("= Hello".to_string(), vec![], None);
+        assert!(result.is_ok());
+        let svgs = result.unwrap();
+        assert_eq!(svgs.len(), 1);
+        assert!(svgs[0].contains("<svg"));
+    }
 }

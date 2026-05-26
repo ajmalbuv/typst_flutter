@@ -1,0 +1,28 @@
+# rust/justfile
+
+set shell := ["sh", "-c"]
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+
+# Build in release mode
+build:
+    cargo build --release
+
+# Run rust tests
+test:
+    cargo test
+
+# Run clippy lints
+lint:
+    cargo clippy --all-targets --all-features -- -D warnings
+
+# Format check
+fmt-check:
+    cargo fmt --all -- --check
+
+# Apply formatting
+fmt:
+    cargo fmt --all
+
+# Audit dependencies
+audit:
+    cargo audit

@@ -40,7 +40,15 @@ class TypstCompiler {
   /// This is safe to call multiple times; the native library is only
   /// initialised once.
   static Future<TypstCompiler> create({FontSource? fonts}) async {
-    await RustLib.init();
+    try {
+      await RustLib.init();
+      // flutter_rust_bridge throws a StateError if init() is called more than
+      // once. We ignore this specific error to remain robust in tests.
+      // ignore: avoid_catching_errors
+    } on StateError catch (e) {
+      if (!e.message.contains('twice')) rethrow;
+    }
+
     final engine = api.TypstEngine();
     if (fonts != null) {
       final fontBytes = await fonts.load();
