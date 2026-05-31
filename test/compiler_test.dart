@@ -5,6 +5,8 @@ import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
 class FakeCompiledDocument extends Fake implements api.CompiledDocument {
+  bool disposed = false;
+
   @override
   Future<BigInt> pageCount() async => BigInt.from(1);
 
@@ -27,6 +29,11 @@ class FakeCompiledDocument extends Fake implements api.CompiledDocument {
     width: 100,
     height: 100,
   );
+
+  @override
+  void dispose() {
+    disposed = true;
+  }
 }
 
 /// A manual "Fake" implementation of the TypstEngine.
@@ -126,6 +133,43 @@ void main() {
     test('dispose() releases resources', () async {
       final compiler = await TypstCompiler.create();
       compiler.dispose();
+    });
+  });
+
+  group('TypstDocument', () {
+    test('dispose() is safe to call multiple times', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+
+      doc.dispose();
+    });
+
+    test('use after dispose throws StateError', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      doc.dispose();
+
+      expect(doc.exportPdf, throwsStateError);
+      expect(() => doc.renderSvg(0), throwsStateError);
+      expect(() => doc.renderRaster(pageIndex: 0), throwsStateError);
+      expect(() => doc.pageInfo(0), throwsStateError);
+    });
+
+    test('renderSvg returns SVG string', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      final svg = await doc.renderSvg(0);
+
+      expect(svg, contains('<svg'));
+    });
+
+    test('pageInfo returns dimensions', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      final info = await doc.pageInfo(0);
+
+      expect(info.widthPt, equals(200));
+      expect(info.heightPt, equals(300));
     });
   });
 

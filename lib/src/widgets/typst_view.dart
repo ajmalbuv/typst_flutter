@@ -97,7 +97,7 @@ class TypstView extends StatefulWidget {
 class _TypstViewState extends State<TypstView> {
   // If managing our own compiler:
   TypstCompiler? _compiler;
-  TypstDocument? _ownedDocument;
+  late TypstDocument? _ownedDocument;
 
   // Render state:
   ui.Image? _image;

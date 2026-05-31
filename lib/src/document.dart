@@ -7,9 +7,23 @@ import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 /// A compiled Typst document.
 ///
 /// This is a lightweight handle to the immutable document living in
-/// Rust's memory.
-/// It exposes methods to lazily render pages as needed.
-/// Memory is freed automatically when this object is garbage collected.
+/// Rust's memory. It exposes methods to lazily render pages as needed.
+///
+/// **Lifecycle:** Call [dispose] when you are done with this document to
+/// eagerly release the native memory held by the Rust `PagedDocument`.
+/// If not disposed, resources will eventually be reclaimed by the Dart
+/// garbage collector, but this is non-deterministic and the underlying
+/// document can be several megabytes.
+///
+/// ```dart
+/// final doc = await compiler.compile(source: markup);
+/// try {
+///   final pdf = await doc.exportPdf();
+///   // ...use pdf bytes...
+/// } finally {
+///   doc.dispose();
+/// }
+/// ```
 class TypstDocument {
   TypstDocument._({
     required api.CompiledDocument inner,
@@ -17,6 +31,7 @@ class TypstDocument {
   }) : _inner = inner;
 
   final api.CompiledDocument _inner;
+  bool _disposed = false;
 
   /// The total number of pages in the compiled document.
   final int pageCount;
@@ -27,10 +42,30 @@ class TypstDocument {
     return TypstDocument._(inner: inner, pageCount: count.toInt());
   }
 
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError(
+        'TypstDocument has already been disposed. '
+        'Do not use a document after calling dispose().',
+      );
+    }
+  }
+
+  /// Releases the native resources held by this document.
+  ///
+  /// After calling this, all methods on this instance will throw
+  /// [StateError]. It is safe to call [dispose] more than once.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _inner.dispose();
+  }
+
   /// Gets the dimensions of a specific page in points (pt).
   ///
   /// The aspect ratio can be calculated as `widthPt / heightPt`.
   Future<api.PageInfo> pageInfo(int pageIndex) async {
+    _checkNotDisposed();
     try {
       return await _inner.pageInfo(index: BigInt.from(pageIndex));
     } catch (e) {
@@ -40,6 +75,7 @@ class TypstDocument {
 
   /// Exports the entire document to a raw PDF byte array.
   Future<Uint8List> exportPdf() async {
+    _checkNotDisposed();
     try {
       return await _inner.exportPdf();
     } catch (e) {
@@ -49,6 +85,7 @@ class TypstDocument {
 
   /// Exports a specific page to an SVG string.
   Future<String> renderSvg(int pageIndex) async {
+    _checkNotDisposed();
     try {
       return await _inner.exportSvg(index: BigInt.from(pageIndex));
     } catch (e) {
@@ -61,6 +98,7 @@ class TypstDocument {
     required int pageIndex,
     double pixelsPerPt = 2.0,
   }) async {
+    _checkNotDisposed();
     try {
       final result = await _inner.renderPage(
         index: BigInt.from(pageIndex),
@@ -103,9 +141,45 @@ class TypstRenderResult {
   ui.Image? _cachedImage;
 
   /// Decodes the raw RGBA pixels into a [ui.Image] that Flutter can display.
+  ///
+  /// The resulting image is cached. Subsequent calls return the same instance
+  /// without re-decoding. Call [dispose] to release the cached image.
   Future<ui.Image> toImage() async {
     if (_cachedImage != null) return _cachedImage!;
+    _cachedImage = await _decodeImage();
+    return _cachedImage!;
+  }
 
+  /// Encodes the raw RGBA pixels as a PNG and returns the PNG bytes.
+  ///
+  /// This method is self-contained: if no cached [ui.Image] exists, it
+  /// creates a temporary one, encodes it, and disposes it immediately —
+  /// no leak even if [dispose] is never called. If a cached image already
+  /// exists (from a prior [toImage] call), it reuses that image without
+  /// disposing it.
+  Future<Uint8List> toPng() async {
+    final hadCached = _cachedImage != null;
+    final image = hadCached ? _cachedImage! : await _decodeImage();
+    try {
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw StateError('PNG encoding returned null.');
+      }
+      return byteData.buffer.asUint8List();
+    } finally {
+      // Only dispose the image if we created it ad-hoc for this call.
+      if (!hadCached) image.dispose();
+    }
+  }
+
+  /// Releases the cached [ui.Image] if it exists.
+  void dispose() {
+    _cachedImage?.dispose();
+    _cachedImage = null;
+  }
+
+  /// Internal: decodes RGBA bytes into a [ui.Image].
+  Future<ui.Image> _decodeImage() async {
     final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
@@ -115,23 +189,6 @@ class TypstRenderResult {
     );
     final codec = await descriptor.instantiateCodec();
     final frameInfo = await codec.getNextFrame();
-    _cachedImage = frameInfo.image;
-    return _cachedImage!;
-  }
-
-  /// Encodes the raw RGBA pixels as a PNG and returns the PNG bytes.
-  Future<Uint8List> toPng() async {
-    final image = await toImage();
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) {
-      throw StateError('PNG encoding returned null.');
-    }
-    return byteData.buffer.asUint8List();
-  }
-
-  /// Releases the cached [ui.Image] if it exists.
-  void dispose() {
-    _cachedImage?.dispose();
-    _cachedImage = null;
+    return frameInfo.image;
   }
 }

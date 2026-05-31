@@ -12,6 +12,24 @@ import 'package:typst_flutter/src/widgets/typst_view.dart';
 ///
 /// This widget compiles the Typst source **once** and lazily renders pages as
 /// they are scrolled into view.
+///
+/// There are two ways to use this widget:
+///
+/// **1. Self-managed compilation** (simple / standalone):
+/// ```dart
+/// TypstDocumentViewer(
+///   source: myMarkup,
+///   fonts: FontSource.assets(['assets/fonts/Roboto.ttf']),
+/// )
+/// ```
+///
+/// **2. Pre-compiled document** (shared compiler, zero per-widget cost):
+/// ```dart
+/// final compiler = await TypstCompiler.create(fonts: ...);
+/// final doc = await compiler.compile(source: myMarkup);
+///
+/// TypstDocumentViewer.document(document: doc)
+/// ```
 class TypstDocumentViewer extends StatefulWidget {
   /// Creates a [TypstDocumentViewer] that manages its own compilation.
   const TypstDocumentViewer({
@@ -27,10 +45,33 @@ class TypstDocumentViewer extends StatefulWidget {
     this.pageSpacing = 8.0,
     this.pageColor = Colors.white,
     this.pageElevation = 2.0,
-  });
+  }) : document = null;
+
+  /// Creates a [TypstDocumentViewer] from an already-compiled
+  /// [TypstDocument].
+  ///
+  /// This avoids creating a per-widget compiler and is the recommended
+  /// approach when you already have a [TypstCompiler] instance.
+  const TypstDocumentViewer.document({
+    required this.document,
+    super.key,
+    this.renderMode = TypstRenderMode.svg,
+    this.pixelsPerPt = 2.0,
+    this.loadingBuilder,
+    this.errorBuilder,
+    this.pageSpacing = 8.0,
+    this.pageColor = Colors.white,
+    this.pageElevation = 2.0,
+  }) : source = null,
+       fonts = null,
+       files = null,
+       date = null;
+
+  /// The compiled document to render (if using [TypstDocumentViewer.document]).
+  final TypstDocument? document;
 
   /// The Typst markup source to compile and render.
-  final String source;
+  final String? source;
 
   /// Font files to make available to the Typst compiler.
   final FontSource? fonts;
@@ -73,17 +114,37 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
   TypstCompiler? _compiler;
   bool _loading = true;
   TypstCompileException? _error;
-  TypstDocument? _document;
+  TypstDocument? _ownedDocument;
+
+  TypstDocument? get _activeDocument => widget.document ?? _ownedDocument;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_compileDocument());
+    if (widget.document != null) {
+      // Pre-compiled document: no compilation needed.
+      _loading = false;
+    } else {
+      unawaited(_compileDocument());
+    }
   }
 
   @override
   void didUpdateWidget(TypstDocumentViewer old) {
     super.didUpdateWidget(old);
+
+    // Document-mode: re-render if the document handle changed.
+    if (widget.document != null) {
+      if (widget.document != old.document) {
+        setState(() {
+          _loading = false;
+          _error = null;
+        });
+      }
+      return;
+    }
+
+    // Source-mode: recompile if inputs changed.
     if (widget.source != old.source ||
         widget.fonts != old.fonts ||
         widget.files != old.files ||
@@ -114,7 +175,7 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
       );
 
       final doc = await _compiler!.compile(
-        source: widget.source,
+        source: widget.source!,
         files: widget.files,
         date: widget.date,
       );
@@ -122,7 +183,7 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
       if (!mounted) return;
 
       setState(() {
-        _document = doc;
+        _ownedDocument = doc;
         _loading = false;
       });
     } on TypstCompileException catch (e) {
@@ -157,7 +218,7 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
           );
     }
 
-    final doc = _document;
+    final doc = _activeDocument;
     if (doc == null) return const SizedBox.shrink();
 
     return ListView.separated(
