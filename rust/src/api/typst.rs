@@ -95,8 +95,7 @@ impl CompiledDocument {
 
     /// Exports the document to a PDF byte array.
     pub fn export_pdf(&self) -> Result<Vec<u8>, String> {
-        typst_pdf::pdf(&self.inner, &typst_pdf::PdfOptions::default())
-            .map_err(|e| format!("{e:?}"))
+        typst_pdf::pdf(&self.inner, &typst_pdf::PdfOptions::default()).map_err(|e| format!("{e:?}"))
     }
 
     /// Exports a specific page to an SVG string.

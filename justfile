@@ -47,8 +47,11 @@ prep: fmt fix get gen test-rust lint-rust
 # Rust linting with clippy
 lint-rust:
     cd rust {{ and }} cargo clippy --all-targets --all-features -- -D warnings
-# Rust format check
+# Rust format
 fmt-rust:
+    cd rust {{ and }} cargo fmt --all
+# Rust format check
+fmt-rust-check:
     cd rust {{ and }} cargo fmt --all -- --check
 # Rust dependency audit
 audit-rust:
