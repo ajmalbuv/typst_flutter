@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:meta/meta.dart';
 
 /// Defines where the Typst compiler should look for fonts.
 // ignore: one_member_abstracts
@@ -16,6 +17,7 @@ abstract class FontSource {
   factory FontSource.none() = _NoneFontSource;
 
   /// Loads the font data into memory.
+  @internal
   Future<List<Uint8List>> load();
 }
 
@@ -24,6 +26,7 @@ class _AssetFontSource extends FontSource {
   final List<String> assetPaths;
 
   @override
+  @internal
   Future<List<Uint8List>> load() async {
     final results = <Uint8List>[];
     for (final path in assetPaths) {
@@ -39,6 +42,7 @@ class _BytesFontSource extends FontSource {
   final List<Uint8List> data;
 
   @override
+  @internal
   Future<List<Uint8List>> load() async => data;
 }
 
@@ -46,5 +50,6 @@ class _NoneFontSource extends FontSource {
   const _NoneFontSource();
 
   @override
+  @internal
   Future<List<Uint8List>> load() async => [];
 }

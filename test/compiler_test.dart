@@ -44,6 +44,9 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
 
   @override
   Future<void> addFonts({required List<Uint8List> fontData}) async {}
+
+  @override
+  void dispose() {}
 }
 
 /// A manual "Fake" implementation of the Rust API.
@@ -101,6 +104,11 @@ void main() {
       expect(result.width, equals(100));
       expect(result.height, equals(100));
       expect(result.bytes.length, equals(100 * 100 * 4));
+    });
+
+    test('dispose() releases resources', () async {
+      final compiler = await TypstCompiler.create();
+      compiler.dispose();
     });
   });
 

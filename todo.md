@@ -41,12 +41,6 @@ This way Dart's exhaustive pattern matching handles it and runtime `StateError`s
 
 ---
 
-### 2. `TypstCompiler` — engine state is exposed publicly
-
-The `engine` property (`TypstEngine`, the underlying Rust handle) is `final` but public. Callers can hold a reference to the raw engine and call it directly, bypassing your Dart-side error handling, debouncing, and any future thread-safety guards. It should be `@internal` or private, with access only through the compiler's methods.
-
----
-
 ### 3. `compileDocument` returns `int` (page count) but keeps state implicitly
 
 ```dart
@@ -60,30 +54,6 @@ This API compiles and holds the document in memory server-side (in Rust), return
 ### 4. `TypstView` — debounce creates a compiler per widget
 
 `TypstView` appears to manage its own compilation lifecycle (it accepts `fonts` and `files` and debounces on `source` changes), which means every `TypstView` in the tree is likely initializing its own Rust engine. Your own docs say "create a single instance per app" — but `TypstView` hides that from the user and almost certainly violates it. Either `TypstView` should accept an external `TypstCompiler` instance, or you need to expose a global/singleton compiler that widgets share via `InheritedWidget`.
-
----
-
-### 5. `FontSource.load()` is public but shouldn't be
-
-`FontSource` is an abstract class with a `load()` method that returns raw `Uint8List` data. This is an internal implementation detail (the compiler calls it when initializing). Exposing it lets users call `load()` themselves and do whatever with the bytes, and it creates a contract you now have to maintain. Mark it `@internal` or move it to `src/`.
-
----
-
-### 6. `TypstCompileException` takes `Object error` in `errorBuilder`, not the typed exception
-
-In both `TypstView` and `TypstDocumentViewer`:
-
-```dart
-Widget errorBuilder(BuildContext context, Object error)?
-```
-
-The `error` is typed as `Object`, so callers have to downcast to `TypstCompileException` themselves to access `diagnostics`. Since you went to the trouble of building a structured `TypstDiagnostic` list, you should expose it:
-
-```dart
-Widget errorBuilder(BuildContext context, TypstCompileException error)?
-```
-
-Otherwise the whole structured error handling feature is half-hidden.
 
 ---
 
@@ -105,22 +75,12 @@ The dimensions are available synchronously (from the frame data) but the image i
 
 ---
 
-### 9. No `dispose()` on `TypstCompiler`
-
-The compiler holds a native Rust resource (`TypstEngine`). There's no `dispose()` method in the public API, which means there's no way to release the native memory/handle explicitly. This is a resource leak for any app that creates compilers dynamically (e.g., one per document in a document picker). At minimum, implement `Finalizable` or expose a `dispose()`.
-
----
-
 **Summary by severity:**
 
 | Issue                                      | Severity  |
 | ------------------------------------------ | --------- |
 | Implicit shared state in `compileDocument` | 🔴 High   |
-| No `dispose()` on `TypstCompiler`          | 🔴 High   |
 | `TypstDocument` not a sealed class         | 🟠 Medium |
 | Per-widget compiler in `TypstView`         | 🟠 Medium |
-| `errorBuilder` typed as `Object`           | 🟠 Medium |
-| `engine` publicly exposed                  | 🟡 Low    |
-| `FontSource.load()` publicly exposed       | 🟡 Low    |
 | Redundant widget pair                      | 🟡 Low    |
 | Async/sync dimension mismatch              | 🟡 Low    |

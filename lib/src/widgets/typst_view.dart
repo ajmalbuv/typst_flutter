@@ -102,7 +102,8 @@ class TypstView extends StatefulWidget {
   ///
   /// Receives the [BuildContext] and the thrown [TypstCompileException].
   /// If null, a red [Text] with the error message is shown.
-  final Widget Function(BuildContext context, Object error)? errorBuilder;
+  final Widget Function(BuildContext context, TypstCompileException error)?
+  errorBuilder;
 
   /// How the rendered image should be inscribed into the space allocated
   /// for this widget. Defaults to [BoxFit.contain].
@@ -116,7 +117,7 @@ class _TypstViewState extends State<TypstView> {
   // ── State ──────────────────────────────────────────────────────────────────
 
   ui.Image? _image;
-  Object? _error;
+  TypstCompileException? _error;
   bool _loading = true;
 
   // ── Internal infrastructure ────────────────────────────────────────────────
@@ -144,6 +145,7 @@ class _TypstViewState extends State<TypstView> {
 
     // Re-create the compiler if the font source changed.
     if (widget.fonts != old.fonts) {
+      _compiler?.dispose();
       _compiler = null;
       _scheduleRender();
       return;
@@ -162,6 +164,7 @@ class _TypstViewState extends State<TypstView> {
   void dispose() {
     _debounce?.cancel();
     _image?.dispose();
+    _compiler?.dispose();
     super.dispose();
   }
 
@@ -173,10 +176,17 @@ class _TypstViewState extends State<TypstView> {
         fonts: widget.fonts ?? FontSource.none(),
       );
       _scheduleRender(immediate: true);
-    } on Object catch (e) {
+    } on TypstCompileException catch (e) {
       if (mounted) {
         setState(() {
           _error = e;
+          _loading = false;
+        });
+      }
+    } on Object catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = TypstCompileException(e.toString());
           _loading = false;
         });
       }
@@ -288,7 +298,7 @@ class _TypstViewState extends State<TypstView> {
       ? widget.loadingBuilder!(context)
       : const Center(child: CircularProgressIndicator());
 
-  Widget _buildError(BuildContext context, Object error) =>
+  Widget _buildError(BuildContext context, TypstCompileException error) =>
       widget.errorBuilder != null
       ? widget.errorBuilder!(context, error)
       : _DefaultErrorView(error: error);
@@ -318,7 +328,7 @@ class _SmallLoadingIndicator extends StatelessWidget {
 /// but a previous image is still being displayed.
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.error});
-  final Object error;
+  final TypstCompileException error;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -337,7 +347,7 @@ class _ErrorBanner extends StatelessWidget {
 /// image to fall back on.
 class _DefaultErrorView extends StatelessWidget {
   const _DefaultErrorView({required this.error});
-  final Object error;
+  final TypstCompileException error;
 
   @override
   Widget build(BuildContext context) => ColoredBox(

@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:ui' as ui;
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -25,12 +26,23 @@ import 'package:typst_flutter/src/rust/frb_generated.dart';
 ///
 /// // Render to Flutter image (live preview)
 /// final result = await compiler.renderPage(source: myMarkup);
+///
+/// // Release resources when done
+/// compiler.dispose();
 /// ```
-class TypstCompiler {
-  TypstCompiler._({required this.engine});
+class TypstCompiler implements Finalizable {
+  TypstCompiler._({required api.TypstEngine engine}) : _engine = engine;
 
   /// The underlying stateful Rust engine.
-  final api.TypstEngine engine;
+  final api.TypstEngine _engine;
+
+  /// Releases the native resources associated with this compiler.
+  ///
+  /// After calling this, the compiler instance is no longer usable and any
+  /// further calls to its methods will throw an error.
+  void dispose() {
+    _engine.dispose();
+  }
 
   /// Creates a [TypstCompiler] and initialises the native bridge.
   ///
@@ -65,7 +77,7 @@ class TypstCompiler {
   Future<void> addFonts(FontSource fonts) async {
     final fontBytes = await fonts.load();
     if (fontBytes.isNotEmpty) {
-      await engine.addFonts(fontData: fontBytes);
+      await _engine.addFonts(fontData: fontBytes);
     }
   }
 
@@ -83,7 +95,7 @@ class TypstCompiler {
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
     try {
-      return await engine.compileDocument(
+      return await _engine.compileDocument(
         markup: source,
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
@@ -105,7 +117,7 @@ class TypstCompiler {
     double pixelsPerPt = 2.0,
   }) async {
     try {
-      final result = await engine.renderCachedPage(
+      final result = await _engine.renderCachedPage(
         pageIndex: BigInt.from(pageIndex),
         pixelPerPt: pixelsPerPt,
       );
@@ -123,7 +135,7 @@ class TypstCompiler {
   /// Call [compileDocument] first.
   Future<String> renderCachedPageAsSvg({int pageIndex = 0}) async {
     try {
-      return await engine.renderCachedPageAsSvg(
+      return await _engine.renderCachedPageAsSvg(
         pageIndex: BigInt.from(pageIndex),
       );
     } catch (e) {
@@ -140,7 +152,7 @@ class TypstCompiler {
     final virtualFiles = await _buildVirtualFiles(files);
 
     try {
-      final result = await engine.compilePdf(
+      final result = await _engine.compilePdf(
         markup: source,
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
@@ -170,7 +182,7 @@ class TypstCompiler {
     final virtualFiles = await _buildVirtualFiles(files);
 
     try {
-      final result = await engine.renderPage(
+      final result = await _engine.renderPage(
         markup: source,
         files: virtualFiles,
         pageIndex: BigInt.from(pageIndex),
@@ -201,7 +213,7 @@ class TypstCompiler {
     final virtualFiles = await _buildVirtualFiles(files);
 
     try {
-      final result = await engine.compileSvg(
+      final result = await _engine.compileSvg(
         markup: source,
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
@@ -227,7 +239,7 @@ class TypstCompiler {
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
     try {
-      return await engine.renderPageAsPng(
+      return await _engine.renderPageAsPng(
         markup: source,
         files: virtualFiles,
         pageIndex: BigInt.from(pageIndex),

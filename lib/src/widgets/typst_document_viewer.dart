@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:typst_flutter/src/compiler.dart';
+import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
 import 'package:typst_flutter/src/fonts.dart';
 
@@ -51,7 +52,10 @@ class TypstDocumentViewer extends StatefulWidget {
   final WidgetBuilder? loadingBuilder;
 
   /// Builder for the error state shown when compilation fails.
-  final Widget Function(BuildContext context, Object error)? errorBuilder;
+  ///
+  /// Receives the [BuildContext] and the thrown [TypstCompileException].
+  final Widget Function(BuildContext context, TypstCompileException error)?
+  errorBuilder;
 
   /// Spacing between pages in the list.
   final double pageSpacing;
@@ -69,7 +73,7 @@ class TypstDocumentViewer extends StatefulWidget {
 class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
   TypstCompiler? _compiler;
   bool _loading = true;
-  Object? _error;
+  TypstCompileException? _error;
   int _pageCount = 0;
 
   @override
@@ -85,8 +89,18 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
         widget.fonts != old.fonts ||
         widget.files != old.files ||
         widget.date != old.date) {
+      if (widget.fonts != old.fonts) {
+        _compiler?.dispose();
+        _compiler = null;
+      }
       unawaited(_compileDocument());
     }
+  }
+
+  @override
+  void dispose() {
+    _compiler?.dispose();
+    super.dispose();
   }
 
   Future<void> _compileDocument() async {
@@ -112,10 +126,16 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
         _pageCount = count;
         _loading = false;
       });
-    } on Object catch (e) {
+    } on TypstCompileException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e;
+        _loading = false;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = TypstCompileException(e.toString());
         _loading = false;
       });
     }
@@ -183,7 +203,7 @@ class _TypstPageRendererState extends State<_TypstPageRenderer> {
   String? _svgString;
   ui.Image? _image;
   bool _loading = true;
-  Object? _error;
+  TypstCompileException? _error;
 
   @override
   void initState() {
@@ -243,10 +263,16 @@ class _TypstPageRendererState extends State<_TypstPageRenderer> {
           _loading = false;
         });
       }
-    } on Object catch (e) {
+    } on TypstCompileException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e;
+        _loading = false;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = TypstCompileException(e.toString());
         _loading = false;
       });
     }

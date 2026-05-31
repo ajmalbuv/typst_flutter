@@ -7,7 +7,6 @@ import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
 import 'package:typst_flutter/src/fonts.dart';
 import 'package:typst_flutter/src/widgets/typst_view.dart' show TypstView;
-import 'package:typst_flutter/typst_flutter.dart' show TypstView;
 
 /// A Flutter widget that renders a Typst document page as an SVG.
 ///
@@ -51,7 +50,10 @@ class TypstSvgView extends StatefulWidget {
   final WidgetBuilder? loadingBuilder;
 
   /// Builder for the error state shown when compilation fails.
-  final Widget Function(BuildContext context, Object error)? errorBuilder;
+  ///
+  /// Receives the [BuildContext] and the thrown [TypstCompileException].
+  final Widget Function(BuildContext context, TypstCompileException error)?
+  errorBuilder;
 
   /// How the rendered image should be inscribed into the space allocated.
   final BoxFit fit;
@@ -62,7 +64,7 @@ class TypstSvgView extends StatefulWidget {
 
 class _TypstSvgViewState extends State<TypstSvgView> {
   String? _svgString;
-  Object? _error;
+  TypstCompileException? _error;
   bool _loading = true;
 
   TypstCompiler? _compiler;
@@ -79,6 +81,7 @@ class _TypstSvgViewState extends State<TypstSvgView> {
   void didUpdateWidget(TypstSvgView old) {
     super.didUpdateWidget(old);
     if (widget.fonts != old.fonts) {
+      _compiler?.dispose();
       _compiler = null;
       _scheduleRender();
       return;
@@ -94,6 +97,7 @@ class _TypstSvgViewState extends State<TypstSvgView> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _compiler?.dispose();
     super.dispose();
   }
 
@@ -103,10 +107,17 @@ class _TypstSvgViewState extends State<TypstSvgView> {
         fonts: widget.fonts ?? FontSource.none(),
       );
       _scheduleRender(immediate: true);
-    } on Object catch (e) {
+    } on TypstCompileException catch (e) {
       if (mounted) {
         setState(() {
           _error = e;
+          _loading = false;
+        });
+      }
+    } on Object catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = TypstCompileException(e.toString());
           _loading = false;
         });
       }
@@ -201,7 +212,7 @@ class _TypstSvgViewState extends State<TypstSvgView> {
       ? widget.loadingBuilder!(context)
       : const Center(child: CircularProgressIndicator());
 
-  Widget _buildError(BuildContext context, Object error) =>
+  Widget _buildError(BuildContext context, TypstCompileException error) =>
       widget.errorBuilder != null
       ? widget.errorBuilder!(context, error)
       : _DefaultErrorView(error: error);
@@ -225,7 +236,7 @@ class _SmallLoadingIndicator extends StatelessWidget {
 
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.error});
-  final Object error;
+  final TypstCompileException error;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -242,7 +253,7 @@ class _ErrorBanner extends StatelessWidget {
 
 class _DefaultErrorView extends StatelessWidget {
   const _DefaultErrorView({required this.error});
-  final Object error;
+  final TypstCompileException error;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
