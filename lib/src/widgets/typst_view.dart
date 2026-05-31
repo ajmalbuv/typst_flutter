@@ -2,261 +2,224 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:typst_flutter/src/compiler.dart';
+import 'package:typst_flutter/src/document.dart';
 import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
 import 'package:typst_flutter/src/fonts.dart';
+import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 
-/// A Flutter widget that renders a Typst document page as an image.
+/// How the Typst document should be rendered.
+enum TypstRenderMode {
+  /// Render as a scalable vector graphic (SVG). Crisp at any zoom.
+  svg,
+
+  /// Render as a rasterized pixel image.
+  raster,
+}
+
+/// A widget that renders a single page of a Typst document.
 ///
-/// [TypstView] compiles the given [source] markup and renders the result
-/// inline. It **automatically re-renders** whenever [source], [fonts],
-/// [files], [pageIndex], or [pixelsPerPt] changes — making it suitable for
-/// live-preview editors.
-///
-/// Re-renders are debounced by [debounceDuration] (default 300 ms) so that
-/// rapid changes during typing do not flood the native compiler.
-///
-/// ### Basic usage
-/// ```dart
-/// TypstView(
-///   source: r'''
-///     #set page(width: 148mm, height: 210mm, margin: 1cm)
-///     = Hello, Typst!
-///     This is rendered *natively* inside Flutter.
-///   ''',
-/// )
-/// ```
-///
-/// ### With custom fonts and images
-/// ```dart
-/// TypstView(
-///   source: r'#image("logo.png") Hello!',
-///   fonts: FontSource.assets(['assets/fonts/Roboto.ttf']),
-///   files: FileSource.assets({'logo.png': 'assets/images/logo.png'}),
-///   pixelsPerPt: 2.0,
-///   loadingBuilder: (context) => const CircularProgressIndicator(),
-///   errorBuilder: (context, error) => Text(
-///     error.toString(),
-///     style: const TextStyle(color: Colors.red),
-///   ),
-/// )
-/// ```
+/// If [document] is provided, it renders directly from that handle.
+/// If [source] is provided, it manages its own compilation lifecycle.
 class TypstView extends StatefulWidget {
-  /// Creates a [TypstView] that compiles and renders the given [source].
+  /// Creates a [TypstView] from an already-compiled [TypstDocument].
   const TypstView({
+    required this.document,
+    super.key,
+    this.pageIndex = 0,
+    this.renderMode = TypstRenderMode.svg,
+    this.pixelsPerPt = 2.0,
+    this.fit = BoxFit.contain,
+    this.loadingBuilder,
+    this.errorBuilder,
+  }) : source = null,
+       fonts = null,
+       files = null,
+       date = null;
+
+  /// Creates a [TypstView] that compiles and renders the given [source].
+  ///
+  /// This constructor maintains its own internal compiler.
+  const TypstView.source({
     required this.source,
     super.key,
     this.fonts,
     this.files,
+    this.date,
     this.pageIndex = 0,
+    this.renderMode = TypstRenderMode.svg,
     this.pixelsPerPt = 2.0,
-    this.debounceDuration = const Duration(milliseconds: 300),
+    this.fit = BoxFit.contain,
     this.loadingBuilder,
     this.errorBuilder,
-    this.fit = BoxFit.contain,
-  });
+  }) : document = null;
 
-  /// The Typst markup source to compile and render.
-  ///
-  /// Changing this property triggers a debounced re-render.
-  final String source;
+  /// The compiled document to render.
+  final TypstDocument? document;
 
-  /// Font files to make available to the Typst compiler.
-  ///
-  /// Defaults to [FontSource.none] (Typst built-in fonts only).
-  /// Changing this property triggers a re-render.
+  /// The source markup (if not providing a compiled document).
+  final String? source;
+
+  /// Font files for compilation (if providing [source]).
   final FontSource? fonts;
 
-  /// Virtual files (images, data, includes) the markup may reference.
-  ///
-  /// The map key must match the path written in the markup exactly.
-  /// For example, `FileSource.assets({'logo.png': 'assets/logo.png'})`
-  /// makes `#image("logo.png")` work. Changing this triggers a re-render.
+  /// Virtual files for compilation (if providing [source]).
   final FileSource? files;
 
-  /// Zero-based index of the page to render.
-  ///
-  /// Defaults to 0 (first page). Changing this triggers a re-render.
+  /// The date to inject for `#datetime.today()` (if providing [source]).
+  final DateTime? date;
+
+  /// The 0-based index of the page to render.
   final int pageIndex;
 
-  /// Pixels per typographic point.
-  ///
-  /// A value of 2.0 produces crisp output on standard high-DPI displays.
-  /// Higher values produce sharper images at the cost of more memory.
-  /// Defaults to 2.0.
+  /// The rendering mode (SVG or Raster).
+  final TypstRenderMode renderMode;
+
+  /// Pixel density for raster rendering.
   final double pixelsPerPt;
 
-  /// How long to wait after the last change before triggering a re-render.
-  ///
-  /// Defaults to 300 milliseconds. Set to [Duration.zero] to render
-  /// immediately on every change (not recommended for live editors).
-  final Duration debounceDuration;
+  /// How the image/SVG should be inscribed into the available space.
+  final BoxFit fit;
 
-  /// Builder for the loading state shown while the compiler is running.
-  ///
-  /// If null, a [CircularProgressIndicator] is shown.
+  /// Builder for the loading state.
   final WidgetBuilder? loadingBuilder;
 
-  /// Builder for the error state shown when compilation fails.
-  ///
-  /// Receives the [BuildContext] and the thrown [TypstCompileException].
-  /// If null, a red [Text] with the error message is shown.
+  /// Builder for the error state.
   final Widget Function(BuildContext context, TypstCompileException error)?
   errorBuilder;
-
-  /// How the rendered image should be inscribed into the space allocated
-  /// for this widget. Defaults to [BoxFit.contain].
-  final BoxFit fit;
 
   @override
   State<TypstView> createState() => _TypstViewState();
 }
 
 class _TypstViewState extends State<TypstView> {
-  // ── State ──────────────────────────────────────────────────────────────────
-
-  ui.Image? _image;
-  TypstCompileException? _error;
-  bool _loading = true;
-
-  // ── Internal infrastructure ────────────────────────────────────────────────
-
+  // If managing our own compiler:
   TypstCompiler? _compiler;
-  Timer? _debounce;
+  TypstDocument? _ownedDocument;
 
-  /// Tracks the render generation so stale renders from previous debounce
-  /// fires are discarded.
-  int _generation = 0;
+  // Render state:
+  ui.Image? _image;
+  String? _svgString;
+  api.PageInfo? _pageInfo;
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  bool _loading = true;
+  TypstCompileException? _error;
 
   @override
   void initState() {
     super.initState();
-    // Intentionally not awaited: compiler init runs in the background and
-    // updates state via setState() when it completes.
-    unawaited(_initCompiler());
+    unawaited(_prepareAndRender());
   }
 
   @override
   void didUpdateWidget(TypstView old) {
     super.didUpdateWidget(old);
+    var needsRender = false;
 
-    // Re-create the compiler if the font source changed.
-    if (widget.fonts != old.fonts) {
-      _compiler?.dispose();
-      _compiler = null;
-      _scheduleRender();
-      return;
+    if (widget.document != null) {
+      if (widget.document != old.document ||
+          widget.pageIndex != old.pageIndex ||
+          widget.renderMode != old.renderMode ||
+          widget.pixelsPerPt != old.pixelsPerPt) {
+        needsRender = true;
+      }
+    } else if (widget.source != null) {
+      if (widget.source != old.source ||
+          widget.fonts != old.fonts ||
+          widget.files != old.files ||
+          widget.date != old.date) {
+        if (widget.fonts != old.fonts) {
+          _compiler?.dispose();
+          _compiler = null;
+        }
+        needsRender = true;
+      } else if (widget.pageIndex != old.pageIndex ||
+          widget.renderMode != old.renderMode ||
+          widget.pixelsPerPt != old.pixelsPerPt) {
+        needsRender = true;
+      }
     }
 
-    // Re-render if any render-affecting property changed.
-    if (widget.source != old.source ||
-        widget.files != old.files ||
-        widget.pageIndex != old.pageIndex ||
-        widget.pixelsPerPt != old.pixelsPerPt) {
-      _scheduleRender();
+    if (needsRender) {
+      unawaited(_prepareAndRender());
     }
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _image?.dispose();
     _compiler?.dispose();
     super.dispose();
   }
 
-  // ── Rendering pipeline ─────────────────────────────────────────────────────
-
-  Future<void> _initCompiler() async {
-    try {
-      _compiler = await TypstCompiler.create(
-        fonts: widget.fonts ?? FontSource.none(),
-      );
-      _scheduleRender(immediate: true);
-    } on TypstCompileException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e;
-          _loading = false;
-        });
-      }
-    } on Object catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = TypstCompileException(e.toString());
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  void _scheduleRender({bool immediate = false}) {
-    _debounce?.cancel();
-
-    if (immediate || widget.debounceDuration == Duration.zero) {
-      // Intentionally not awaited: fire-and-forget render.
-      unawaited(_render());
-      return;
-    }
-
-    _debounce = Timer(widget.debounceDuration, _render);
-  }
-
-  Future<void> _render() async {
-    if (!mounted) return;
-
-    // Increment generation so any in-flight render from a previous call
-    // can detect it has been superseded.
-    final generation = ++_generation;
-
+  Future<void> _prepareAndRender() async {
     setState(() {
       _loading = true;
       _error = null;
     });
 
-    // Lazily create the compiler if fonts changed and it was cleared.
-    _compiler ??= await TypstCompiler.create(
-      fonts: widget.fonts ?? FontSource.none(),
-    );
-
-    if (!mounted || generation != _generation) return;
-
     try {
-      final result = await _compiler!.renderPage(
-        source: widget.source,
-        pageIndex: widget.pageIndex,
-        pixelsPerPt: widget.pixelsPerPt,
-        files: widget.files,
-      );
-
-      if (!mounted || generation != _generation) return;
-
-      final newImage = await result.toImage();
-
-      if (!mounted || generation != _generation) {
-        newImage.dispose();
-        return;
+      TypstDocument doc;
+      if (widget.document != null) {
+        doc = widget.document!;
+      } else {
+        _compiler ??= await TypstCompiler.create(
+          fonts: widget.fonts ?? FontSource.none(),
+        );
+        _ownedDocument = await _compiler!.compile(
+          source: widget.source!,
+          files: widget.files,
+          date: widget.date,
+        );
+        doc = _ownedDocument!;
       }
 
+      if (widget.pageIndex >= doc.pageCount) {
+        throw const TypstCompileException('Page index out of bounds');
+      }
+
+      final pageInfo = await doc.pageInfo(widget.pageIndex);
+      if (!mounted) return;
       setState(() {
-        _image?.dispose();
-        _image = newImage;
-        _loading = false;
+        _pageInfo = pageInfo;
       });
+
+      if (widget.renderMode == TypstRenderMode.svg) {
+        final svg = await doc.renderSvg(widget.pageIndex);
+        if (!mounted) return;
+        setState(() {
+          _svgString = svg;
+          _image?.dispose();
+          _image = null;
+          _loading = false;
+        });
+      } else {
+        final result = await doc.renderRaster(
+          pageIndex: widget.pageIndex,
+          pixelsPerPt: widget.pixelsPerPt,
+        );
+        final image = await result.toImage();
+        if (!mounted) {
+          image.dispose();
+          return;
+        }
+        setState(() {
+          _image?.dispose();
+          _image = image;
+          _svgString = null;
+          _loading = false;
+        });
+      }
     } on TypstCompileException catch (e) {
-      if (!mounted || generation != _generation) return;
+      if (!mounted) return;
       setState(() {
         _error = e;
         _loading = false;
       });
     } on Object catch (e) {
-      // Catches any unexpected non-TypstCompileException errors from the
-      // Rust bridge (e.g. platform channel errors) and presents them as a
-      // compile error rather than crashing the widget.
-      if (!mounted || generation != _generation) return;
+      if (!mounted) return;
       setState(() {
         _error = TypstCompileException(e.toString());
         _loading = false;
@@ -264,108 +227,90 @@ class _TypstViewState extends State<TypstView> {
     }
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    if (_loading && _image == null) {
-      return _buildLoading(context);
-    }
-    if (_error != null && _image == null) {
-      return _buildError(context, _error!);
+    if (_loading && _image == null && _svgString == null) {
+      return _buildWrapper(
+        child:
+            widget.loadingBuilder?.call(context) ??
+            const Center(child: CircularProgressIndicator()),
+      );
     }
 
-    // Show the rendered image. If we're re-loading (e.g. source just
-    // changed), keep the previous image visible while the new one compiles.
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (_image != null) RawImage(image: _image, fit: widget.fit),
-        if (_loading)
-          Positioned(right: 8, bottom: 8, child: _SmallLoadingIndicator()),
-        if (_error != null && _image != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _ErrorBanner(error: _error!),
-          ),
-      ],
+    final error = _error;
+    if (error != null && _image == null && _svgString == null) {
+      return _buildWrapper(
+        child:
+            widget.errorBuilder?.call(context, error) ??
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  error.toString(),
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            ),
+      );
+    }
+
+    return _buildWrapper(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (widget.renderMode == TypstRenderMode.svg && _svgString != null)
+            SvgPicture.string(_svgString!, fit: widget.fit)
+          else if (_image != null)
+            RawImage(image: _image, fit: widget.fit),
+          if (_loading)
+            const Positioned(
+              right: 8,
+              bottom: 8,
+              child: _SmallLoadingIndicator(),
+            ),
+          if (error != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                color: Colors.red.withValues(alpha: 0.9),
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  error.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildLoading(BuildContext context) => widget.loadingBuilder != null
-      ? widget.loadingBuilder!(context)
-      : const Center(child: CircularProgressIndicator());
-
-  Widget _buildError(BuildContext context, TypstCompileException error) =>
-      widget.errorBuilder != null
-      ? widget.errorBuilder!(context, error)
-      : _DefaultErrorView(error: error);
+  Widget _buildWrapper({required Widget child}) {
+    if (_pageInfo != null) {
+      return AspectRatio(
+        aspectRatio: _pageInfo!.widthPt / _pageInfo!.heightPt,
+        child: child,
+      );
+    }
+    return SizedBox(height: 400, child: child);
+  }
 }
 
-// ── Private helper widgets ─────────────────────────────────────────────────
-
-/// A small spinner shown in the corner while a re-render is in progress
-/// (i.e. the previous image is still visible).
 class _SmallLoadingIndicator extends StatelessWidget {
+  const _SmallLoadingIndicator();
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(6),
     decoration: BoxDecoration(
       color: Colors.black54,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(4),
     ),
     child: const SizedBox(
-      width: 16,
-      height: 16,
+      width: 12,
+      height: 12,
       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-    ),
-  );
-}
-
-/// A slim banner shown at the bottom of the widget when a re-render fails
-/// but a previous image is still being displayed.
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.error});
-  final TypstCompileException error;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    color: Colors.red.withValues(alpha: 0.85),
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    child: Text(
-      error.toString(),
-      style: const TextStyle(color: Colors.white, fontSize: 12),
-      maxLines: 3,
-      overflow: TextOverflow.ellipsis,
-    ),
-  );
-}
-
-/// Default full-widget error view used when there is no previous rendered
-/// image to fall back on.
-class _DefaultErrorView extends StatelessWidget {
-  const _DefaultErrorView({required this.error});
-  final TypstCompileException error;
-
-  @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: const Color(0xFFFFF3F3),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 32),
-          const SizedBox(height: 8),
-          Text(
-            error.toString(),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red, fontSize: 13),
-          ),
-        ],
-      ),
     ),
   );
 }

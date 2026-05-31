@@ -113,7 +113,9 @@ Today's date injected from Flutter: #datetime.today().display()
               color: const Color(0xFF181825),
               child: TypstDocumentViewer(
                 source: _currentSource,
-                useSvg: _useSvg,
+                renderMode: _useSvg
+                    ? TypstRenderMode.svg
+                    : TypstRenderMode.raster,
                 date: DateTime.now(), // Inject current date from Flutter
                 loadingBuilder: (context) => const Center(
                   child: CircularProgressIndicator(color: Color(0xFF89B4FA)),

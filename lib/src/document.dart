@@ -1,44 +1,112 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-/// A page within a rendered Typst document.
+import 'package:typst_flutter/src/exceptions.dart';
+import 'package:typst_flutter/src/rust/api/typst.dart' as api;
+
+/// A compiled Typst document.
 ///
-/// Provides synchronous access to dimensions ([width], [height], [aspectRatio])
-/// and lazy-loaded, cached access to the rendered image via [toImage].
-class TypstPage {
-  /// Creates a [TypstPage] with the given dimensions and raw RGBA data.
-  TypstPage({
+/// This is a lightweight handle to the immutable document living in
+/// Rust's memory.
+/// It exposes methods to lazily render pages as needed.
+/// Memory is freed automatically when this object is garbage collected.
+class TypstDocument {
+  TypstDocument._({
+    required api.CompiledDocument inner,
+    required this.pageCount,
+  }) : _inner = inner;
+
+  final api.CompiledDocument _inner;
+
+  /// The total number of pages in the compiled document.
+  final int pageCount;
+
+  /// Creates a [TypstDocument] from the inner native handle.
+  static Future<TypstDocument> create(api.CompiledDocument inner) async {
+    final count = await inner.pageCount();
+    return TypstDocument._(inner: inner, pageCount: count.toInt());
+  }
+
+  /// Gets the dimensions of a specific page in points (pt).
+  ///
+  /// The aspect ratio can be calculated as `widthPt / heightPt`.
+  Future<api.PageInfo> pageInfo(int pageIndex) async {
+    try {
+      return await _inner.pageInfo(index: BigInt.from(pageIndex));
+    } catch (e) {
+      throw TypstCompileException(e.toString());
+    }
+  }
+
+  /// Exports the entire document to a raw PDF byte array.
+  Future<Uint8List> exportPdf() async {
+    try {
+      return await _inner.exportPdf();
+    } catch (e) {
+      throw TypstCompileException(e.toString());
+    }
+  }
+
+  /// Exports a specific page to an SVG string.
+  Future<String> renderSvg(int pageIndex) async {
+    try {
+      return await _inner.exportSvg(index: BigInt.from(pageIndex));
+    } catch (e) {
+      throw TypstCompileException(e.toString());
+    }
+  }
+
+  /// Renders a specific page to raw RGBA pixels.
+  Future<TypstRenderResult> renderRaster({
+    required int pageIndex,
+    double pixelsPerPt = 2.0,
+  }) async {
+    try {
+      final result = await _inner.renderPage(
+        index: BigInt.from(pageIndex),
+        pixelPerPt: pixelsPerPt,
+      );
+      return TypstRenderResult(
+        index: pageIndex,
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+      );
+    } catch (e) {
+      throw TypstCompileException(e.toString());
+    }
+  }
+}
+
+/// The result of rendering a Typst document page to a raster image.
+class TypstRenderResult {
+  /// Creates a [TypstRenderResult].
+  TypstRenderResult({
     required this.index,
+    required this.bytes,
     required this.width,
     required this.height,
-    required this.rgba,
   });
 
-  /// Zero-based index of this page in the document.
+  /// Zero-based index of this page.
   final int index;
 
-  /// Width of the page in pixels.
+  /// Raw RGBA pixel data (4 bytes per pixel, row-major order).
+  final Uint8List bytes;
+
+  /// Width of the rendered image in pixels.
   final int width;
 
-  /// Height of the page in pixels.
+  /// Height of the rendered image in pixels.
   final int height;
-
-  /// Raw RGBA pixel data (4 bytes per pixel).
-  final Uint8List rgba;
-
-  /// The ratio of [width] to [height].
-  double get aspectRatio => width / height;
 
   ui.Image? _cachedImage;
 
   /// Decodes the raw RGBA pixels into a [ui.Image] that Flutter can display.
-  ///
-  /// The resulting image is cached. If the image is already decoded,
-  /// this returns the cached instance immediately.
   Future<ui.Image> toImage() async {
     if (_cachedImage != null) return _cachedImage!;
 
-    final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
       width: width,
@@ -51,70 +119,19 @@ class TypstPage {
     return _cachedImage!;
   }
 
+  /// Encodes the raw RGBA pixels as a PNG and returns the PNG bytes.
+  Future<Uint8List> toPng() async {
+    final image = await toImage();
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) {
+      throw StateError('PNG encoding returned null.');
+    }
+    return byteData.buffer.asUint8List();
+  }
+
   /// Releases the cached [ui.Image] if it exists.
   void dispose() {
     _cachedImage?.dispose();
     _cachedImage = null;
   }
-}
-
-/// A document compiled by the Typst compiler.
-///
-/// Use exhaustive pattern matching to handle specific document types:
-/// ```dart
-/// switch (document) {
-///   case PdfDocument(bytes: var b): // Handle PDF
-///   case SvgDocument(pages: var p): // Handle SVG
-///   case RasterDocument(pages: var p): // Handle Raster
-/// }
-/// ```
-sealed class TypstDocument {
-  const TypstDocument({required this.pageCount});
-
-  /// The total number of pages in the document.
-  final int pageCount;
-}
-
-/// A document compiled into raw PDF bytes.
-class PdfDocument extends TypstDocument {
-  /// Creates a [PdfDocument] from compiled bytes.
-  const PdfDocument({required this.bytes, required super.pageCount});
-
-  /// The raw PDF bytes.
-  final Uint8List bytes;
-
-  @override
-  String toString() =>
-      'PdfDocument(pageCount: $pageCount, bytes: ${bytes.length} bytes)';
-}
-
-/// A document compiled into a list of SVG strings (one per page).
-class SvgDocument extends TypstDocument {
-  /// Creates an [SvgDocument] from a list of SVG page strings.
-  const SvgDocument({required this.pages}) : super(pageCount: pages.length);
-
-  /// The SVG string content for each page.
-  final List<String> pages;
-
-  @override
-  String toString() => 'SvgDocument(pageCount: $pageCount)';
-}
-
-/// A document compiled into a set of rasterized images.
-class RasterDocument extends TypstDocument {
-  /// Creates a [RasterDocument] from a list of [TypstPage] objects.
-  const RasterDocument({required this.pages}) : super(pageCount: pages.length);
-
-  /// The rendered pages of this document.
-  final List<TypstPage> pages;
-
-  /// Releases native resources held by each page in the document.
-  void dispose() {
-    for (final page in pages) {
-      page.dispose();
-    }
-  }
-
-  @override
-  String toString() => 'RasterDocument(pageCount: $pageCount)';
 }
