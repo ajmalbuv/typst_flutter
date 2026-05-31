@@ -30,3 +30,6 @@ rust_builder/target/
 # Example app and tests are generally fine to publish, but build artifacts inside them are not.
 example/build/
 example/.dart_tool/
+
+# AI Context
+GEMINI.md

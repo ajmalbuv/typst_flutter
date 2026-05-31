@@ -29,7 +29,7 @@ import 'package:typst_flutter/typst_flutter.dart';
 // 1. Initialize the compiler (loads the native binaries)
 final compiler = await TypstCompiler.create();
 
-// 2. Compile your source code
+// 2. Compile your source code to an opaque handle
 final doc = await compiler.compile(
   source: r'''
     #set page(width: 148mm, height: 210mm, margin: 1cm)
@@ -40,14 +40,20 @@ final doc = await compiler.compile(
   ''',
 );
 
-print('Generated a ${doc.pageCount}-page PDF (${doc.pdf.length} bytes).');
+// 3. Export to PDF bytes
+final pdfBytes = await doc.exportPdf();
+
+print('Generated a ${doc.pageCount}-page PDF (${pdfBytes.length} bytes).');
+
+// Don't forget to dispose the document when you're done!
+doc.dispose();
 ```
 
-You can then pass `doc.pdf` to packages like `printing` or save it to the device's file system using `path_provider`.
+You can then pass `pdfBytes` to packages like `printing` or save it to the device's file system using `path_provider`.
 
 ## Live Preview Widget
 
-If you want to display Typst documents directly in your UI (like a real-time editor), use the `TypstDocumentViewer` widget. It automatically caches pages and provides a smooth scrollable interface.
+If you want to display Typst documents directly in your UI (like a real-time editor), use the `TypstDocumentViewer` widget. It automatically manages the compilation lifecycle.
 
 ```dart
 import 'package:flutter/material.dart';
@@ -61,9 +67,9 @@ class TypstPreview extends StatelessWidget {
         = Multi-page Viewer
         This document spans multiple pages.
         #pagebreak()
-        And scrolling is instantly fast because the document is cached!
+        And scrolling is instantly fast because the document handle is immutable!
       ''',
-      useSvg: true, // Use SVG for crisp vector rendering
+      renderMode: TypstRenderMode.svg, // Use SVG for crisp vector rendering
     );
   }
 }

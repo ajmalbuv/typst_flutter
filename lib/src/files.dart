@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:meta/meta.dart';
 
 /// Defines a set of files (images, data files, included `.typ` files) to
 /// make available to the Typst compiler's virtual file system.
@@ -37,6 +38,7 @@ abstract class FileSource {
 
   /// Loads all files into memory and returns them as a map of
   /// virtual path → bytes.
+  @internal
   Future<Map<String, Uint8List>> load();
 }
 
