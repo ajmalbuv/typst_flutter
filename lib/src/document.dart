@@ -1,107 +1,120 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-/// A document compiled by the Typst compiler.
+/// A page within a rendered Typst document.
 ///
-/// Contains the output PDF bytes and/or rendered page frames.
-class TypstDocument {
-  const TypstDocument._({
-    required this.pageCount,
-    this.pdfBytes,
-    this.svgPages,
-    Map<int, _PageFrame> frames = const {},
-  }) : _frames = frames;
+/// Provides synchronous access to dimensions ([width], [height], [aspectRatio])
+/// and lazy-loaded, cached access to the rendered image via [toImage].
+class TypstPage {
+  /// Creates a [TypstPage] with the given dimensions and raw RGBA data.
+  TypstPage({
+    required this.index,
+    required this.width,
+    required this.height,
+    required this.rgba,
+  });
 
-  /// Creates a [TypstDocument] from compiled PDF bytes.
-  factory TypstDocument.fromPdf({
-    required Uint8List pdfBytes,
-    required int pageCount,
-  }) => TypstDocument._(pdfBytes: pdfBytes, pageCount: pageCount);
+  /// Zero-based index of this page in the document.
+  final int index;
 
-  /// Creates a [TypstDocument] from compiled SVG strings.
-  factory TypstDocument.fromSvg({required List<String> svgPages}) =>
-      TypstDocument._(svgPages: svgPages, pageCount: svgPages.length);
+  /// Width of the page in pixels.
+  final int width;
 
-  /// Creates a [TypstDocument] from a single rendered page frame.
-  factory TypstDocument.fromFrame({
-    required int pageIndex,
-    required Uint8List rgba,
-    required int width,
-    required int height,
-    required int pageCount,
-  }) => TypstDocument._(
-    pageCount: pageCount,
-    frames: {pageIndex: _PageFrame(rgba: rgba, width: width, height: height)},
-  );
+  /// Height of the page in pixels.
+  final int height;
 
-  /// The raw PDF bytes of the compiled document.
-  final Uint8List? pdfBytes;
+  /// Raw RGBA pixel data (4 bytes per pixel).
+  final Uint8List rgba;
 
-  /// The SVG strings for each page of the compiled document.
-  final List<String>? svgPages;
+  /// The ratio of [width] to [height].
+  double get aspectRatio => width / height;
 
-  /// The total number of pages in the document.
-  final int pageCount;
+  ui.Image? _cachedImage;
 
-  final Map<int, _PageFrame> _frames;
-
-  /// Returns the PDF bytes. Throws [StateError] if this document was
-  /// only rendered as a frame or SVG and not compiled to PDF.
-  Uint8List get pdf {
-    if (pdfBytes == null) {
-      throw StateError('PDF bytes not available. Use TypstCompiler.compile().');
-    }
-    return pdfBytes!;
-  }
-
-  /// Returns the SVG strings for each page. Throws [StateError] if this
-  /// document was not compiled to SVG.
-  List<String> get svgs {
-    if (svgPages == null) {
-      throw StateError(
-        'SVG strings not available. Use TypstCompiler.compileSvg().',
-      );
-    }
-    return svgPages!;
-  }
-
-  /// Returns a Flutter [ui.Image] for the given [pageIndex].
+  /// Decodes the raw RGBA pixels into a [ui.Image] that Flutter can display.
   ///
-  /// Throws [StateError] if the page has not been rendered.
-  Future<ui.Image> imageForPage(int pageIndex) async {
-    final frame = _frames[pageIndex];
-    if (frame == null) {
-      throw StateError('Page $pageIndex has not been rendered.');
-    }
-    final buffer = await ui.ImmutableBuffer.fromUint8List(frame.rgba);
+  /// The resulting image is cached. If the image is already decoded,
+  /// this returns the cached instance immediately.
+  Future<ui.Image> toImage() async {
+    if (_cachedImage != null) return _cachedImage!;
+
+    final buffer = await ui.ImmutableBuffer.fromUint8List(rgba);
     final descriptor = ui.ImageDescriptor.raw(
       buffer,
-      width: frame.width,
-      height: frame.height,
+      width: width,
+      height: height,
       pixelFormat: ui.PixelFormat.rgba8888,
     );
     final codec = await descriptor.instantiateCodec();
     final frameInfo = await codec.getNextFrame();
-    return frameInfo.image;
+    _cachedImage = frameInfo.image;
+    return _cachedImage!;
   }
 
-  /// Returns the raw RGBA pixel data for the given [pageIndex], if available.
-  Uint8List? rawRgbaForPage(int pageIndex) => _frames[pageIndex]?.rgba;
-
-  /// Returns the pixel width for the given [pageIndex], if available.
-  int? widthForPage(int pageIndex) => _frames[pageIndex]?.width;
-
-  /// Returns the pixel height for the given [pageIndex], if available.
-  int? heightForPage(int pageIndex) => _frames[pageIndex]?.height;
+  /// Releases the cached [ui.Image] if it exists.
+  void dispose() {
+    _cachedImage?.dispose();
+    _cachedImage = null;
+  }
 }
 
-class _PageFrame {
-  const _PageFrame({
-    required this.rgba,
-    required this.width,
-    required this.height,
-  });
-  final Uint8List rgba;
-  final int width;
-  final int height;
+/// A document compiled by the Typst compiler.
+///
+/// Use exhaustive pattern matching to handle specific document types:
+/// ```dart
+/// switch (document) {
+///   case PdfDocument(bytes: var b): // Handle PDF
+///   case SvgDocument(pages: var p): // Handle SVG
+///   case RasterDocument(pages: var p): // Handle Raster
+/// }
+/// ```
+sealed class TypstDocument {
+  const TypstDocument({required this.pageCount});
+
+  /// The total number of pages in the document.
+  final int pageCount;
+}
+
+/// A document compiled into raw PDF bytes.
+class PdfDocument extends TypstDocument {
+  /// Creates a [PdfDocument] from compiled bytes.
+  const PdfDocument({required this.bytes, required super.pageCount});
+
+  /// The raw PDF bytes.
+  final Uint8List bytes;
+
+  @override
+  String toString() =>
+      'PdfDocument(pageCount: $pageCount, bytes: ${bytes.length} bytes)';
+}
+
+/// A document compiled into a list of SVG strings (one per page).
+class SvgDocument extends TypstDocument {
+  /// Creates an [SvgDocument] from a list of SVG page strings.
+  const SvgDocument({required this.pages}) : super(pageCount: pages.length);
+
+  /// The SVG string content for each page.
+  final List<String> pages;
+
+  @override
+  String toString() => 'SvgDocument(pageCount: $pageCount)';
+}
+
+/// A document compiled into a set of rasterized images.
+class RasterDocument extends TypstDocument {
+  /// Creates a [RasterDocument] from a list of [TypstPage] objects.
+  const RasterDocument({required this.pages}) : super(pageCount: pages.length);
+
+  /// The rendered pages of this document.
+  final List<TypstPage> pages;
+
+  /// Releases native resources held by each page in the document.
+  void dispose() {
+    for (final page in pages) {
+      page.dispose();
+    }
+  }
+
+  @override
+  String toString() => 'RasterDocument(pageCount: $pageCount)';
 }

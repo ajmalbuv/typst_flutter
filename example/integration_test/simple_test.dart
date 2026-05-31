@@ -21,7 +21,7 @@ void main() {
     test('compile() produces valid PDF bytes', () async {
       final doc = await compiler.compile(source: '= Hello, Typst!');
       // PDF files start with the %PDF- header
-      expect(doc.pdf.length, greaterThan(100));
+      expect(doc.bytes.length, greaterThan(100));
       expect(doc.pageCount, equals(1));
     });
 
@@ -56,8 +56,8 @@ void main() {
 
     test('compileSvg() produces valid SVG strings', () async {
       final doc = await compiler.compileSvg(source: '= Hello, Typst!');
-      expect(doc.svgs, isNotEmpty);
-      expect(doc.svgs.first, contains('<svg'));
+      expect(doc.pages, isNotEmpty);
+      expect(doc.pages.first, contains('<svg'));
       expect(doc.pageCount, equals(1));
     });
 

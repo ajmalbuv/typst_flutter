@@ -77,8 +77,9 @@ void main() {
       final compiler = await TypstCompiler.create();
       final doc = await compiler.compile(source: 'Hello');
 
-      expect(doc.pdf, isNotEmpty);
-      expect(doc.pdf.length, equals(4));
+      expect(doc, isA<PdfDocument>());
+      expect(doc.bytes, isNotEmpty);
+      expect(doc.bytes.length, equals(4));
       expect(doc.pageCount, equals(1));
     });
 
@@ -104,6 +105,7 @@ void main() {
       expect(result.width, equals(100));
       expect(result.height, equals(100));
       expect(result.bytes.length, equals(100 * 100 * 4));
+      expect(result.page, isA<TypstPage>());
     });
 
     test('dispose() releases resources', () async {
@@ -113,24 +115,20 @@ void main() {
   });
 
   group('TypstDocument', () {
-    test('fromPdf creates document with PDF bytes', () {
+    test('PdfDocument creates document with PDF bytes', () {
       final bytes = Uint8List.fromList([1, 2, 3]);
-      final doc = TypstDocument.fromPdf(pdfBytes: bytes, pageCount: 5);
+      final doc = PdfDocument(bytes: bytes, pageCount: 5);
 
-      expect(doc.pdf, equals(bytes));
+      expect(doc.bytes, equals(bytes));
       expect(doc.pageCount, equals(5));
-      expect(doc.pdfBytes, isNotNull);
-      expect(doc.svgPages, isNull);
     });
 
-    test('fromSvg creates document with SVG pages', () {
+    test('SvgDocument creates document with SVG pages', () {
       final pages = ['<svg>1</svg>', '<svg>2</svg>'];
-      final doc = TypstDocument.fromSvg(svgPages: pages);
+      final doc = SvgDocument(pages: pages);
 
-      expect(doc.svgs, equals(pages));
+      expect(doc.pages, equals(pages));
       expect(doc.pageCount, equals(2));
-      expect(doc.pdfBytes, isNull);
-      expect(doc.svgPages, isNotNull);
     });
   });
 

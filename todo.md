@@ -26,21 +26,6 @@ Let me fetch the actual source files directly via the pub.dev API and raw GitHub
 
 ## Source-level Issues
 
-### 1. `TypstDocument` — dual PDF/SVG/Frame state with no type safety
-
-`TypstDocument` has three factory constructors (`fromPdf`, `fromSvg`, `fromFrame`) but is a single flat class. Both `pdf` and `svgs` throw `StateError` at runtime if you call the wrong one. This is a classic "tagged union done wrong" pattern — it's error-prone for callers and impossible to enforce at compile time. You should model this as a sealed class:
-
-```dart
-sealed class TypstDocument { ... }
-class PdfDocument extends TypstDocument { final Uint8List pdf; ... }
-class SvgDocument extends TypstDocument { final List<String> pages; ... }
-class FrameDocument extends TypstDocument { ... }
-```
-
-This way Dart's exhaustive pattern matching handles it and runtime `StateError`s become impossible.
-
----
-
 ### 3. `compileDocument` returns `int` (page count) but keeps state implicitly
 
 ```dart
@@ -63,24 +48,10 @@ You have `TypstView` (raster), `TypstSvgView` (SVG), and `TypstDocumentViewer` w
 
 ---
 
-### 8. `TypstDocument.imageForPage()` is async but `heightForPage`/`widthForPage` are sync
-
-```dart
-Future<Image> imageForPage(int pageIndex)
-int? heightForPage(int pageIndex)
-int? widthForPage(int pageIndex)
-```
-
-The dimensions are available synchronously (from the frame data) but the image is async. This means callers can't properly pre-size the widget before the image loads, which causes layout jumps. You should either make all of them synchronous (by decoding the image eagerly) or provide a way to get both dimensions and image in one async call.
-
----
-
 **Summary by severity:**
 
 | Issue                                      | Severity  |
 | ------------------------------------------ | --------- |
 | Implicit shared state in `compileDocument` | 🔴 High   |
-| `TypstDocument` not a sealed class         | 🟠 Medium |
 | Per-widget compiler in `TypstView`         | 🟠 Medium |
 | Redundant widget pair                      | 🟡 Low    |
-| Async/sync dimension mismatch              | 🟡 Low    |

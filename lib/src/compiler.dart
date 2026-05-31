@@ -22,10 +22,11 @@ import 'package:typst_flutter/src/rust/frb_generated.dart';
 ///
 /// // Compile to PDF
 /// final doc = await compiler.compile(source: myMarkup);
-/// await Share.shareXFiles([XFile.fromData(doc.pdf, mimeType: 'application/pdf')]);
+/// // doc is a PdfDocument
 ///
 /// // Render to Flutter image (live preview)
 /// final result = await compiler.renderPage(source: myMarkup);
+/// // result is a TypstRenderResult
 ///
 /// // Release resources when done
 /// compiler.dispose();
@@ -122,6 +123,7 @@ class TypstCompiler implements Finalizable {
         pixelPerPt: pixelsPerPt,
       );
       return TypstRenderResult(
+        index: pageIndex,
         bytes: result.bytes,
         width: result.width,
         height: result.height,
@@ -144,7 +146,7 @@ class TypstCompiler implements Finalizable {
   }
 
   /// Compiles Typst [source] markup to a PDF document.
-  Future<TypstDocument> compile({
+  Future<PdfDocument> compile({
     required String source,
     FileSource? files,
     DateTime? date,
@@ -157,10 +159,7 @@ class TypstCompiler implements Finalizable {
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
       );
-      return TypstDocument.fromPdf(
-        pdfBytes: result.bytes,
-        pageCount: result.pageCount,
-      );
+      return PdfDocument(bytes: result.bytes, pageCount: result.pageCount);
     } on api.TypstCompileError catch (e) {
       throw TypstCompileException(
         'Compilation failed',
@@ -190,6 +189,7 @@ class TypstCompiler implements Finalizable {
         sysTime: _dateTimeToSysTime(date),
       );
       return TypstRenderResult(
+        index: pageIndex,
         bytes: result.bytes,
         width: result.width,
         height: result.height,
@@ -205,7 +205,7 @@ class TypstCompiler implements Finalizable {
   }
 
   /// Compiles Typst [source] markup into a list of SVG strings (one per page).
-  Future<TypstDocument> compileSvg({
+  Future<SvgDocument> compileSvg({
     required String source,
     FileSource? files,
     DateTime? date,
@@ -218,7 +218,7 @@ class TypstCompiler implements Finalizable {
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
       );
-      return TypstDocument.fromSvg(svgPages: result);
+      return SvgDocument(pages: result);
     } on api.TypstCompileError catch (e) {
       throw TypstCompileException(
         'Compilation failed',
@@ -271,49 +271,45 @@ class TypstCompiler implements Finalizable {
 }
 
 /// The result of rendering a Typst document page to a raster image.
+///
+/// Wraps a single [TypstPage] to provide helper methods for image conversion.
 class TypstRenderResult {
-  /// Creates a new render result containing the raw RGBA pixels and dimensions.
-  const TypstRenderResult({
-    required this.bytes,
-    required this.width,
-    required this.height,
-  });
+  /// Creates a new render result.
+  TypstRenderResult({
+    required int index,
+    required Uint8List bytes,
+    required int width,
+    required int height,
+  }) : page = TypstPage(
+         index: index,
+         width: width,
+         height: height,
+         rgba: bytes,
+       );
+
+  /// The underlying page data.
+  final TypstPage page;
 
   /// Raw RGBA pixel data (4 bytes per pixel, row-major order).
-  final Uint8List bytes;
+  Uint8List get bytes => page.rgba;
 
   /// Width of the rendered image in pixels.
-  final int width;
+  int get width => page.width;
 
   /// Height of the rendered image in pixels.
-  final int height;
+  int get height => page.height;
 
   /// Decodes the raw RGBA pixel data into a [ui.Image] that Flutter can
   /// display with a `RawImage` widget or a `CustomPainter`.
-  Future<ui.Image> toImage() async {
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    final descriptor = ui.ImageDescriptor.raw(
-      buffer,
-      width: width,
-      height: height,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final codec = await descriptor.instantiateCodec();
-    final frameInfo = await codec.getNextFrame();
-    return frameInfo.image;
-  }
+  Future<ui.Image> toImage() => page.toImage();
 
   /// Encodes the raw RGBA pixels as a PNG and returns the PNG bytes.
   Future<Uint8List> toPng() async {
     final image = await toImage();
-    try {
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw StateError('PNG encoding returned null — image may be invalid.');
-      }
-      return byteData.buffer.asUint8List();
-    } finally {
-      image.dispose();
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) {
+      throw StateError('PNG encoding returned null — image may be invalid.');
     }
+    return byteData.buffer.asUint8List();
   }
 }
