@@ -20,8 +20,9 @@ void main() {
 
     test('compile() produces valid PDF bytes', () async {
       final doc = await compiler.compile(source: '= Hello, Typst!');
+      final pdf = await doc.exportPdf();
       // PDF files start with the %PDF- header
-      expect(doc.pdf.length, greaterThan(100));
+      expect(pdf.length, greaterThan(100));
       expect(doc.pageCount, equals(1));
     });
 
@@ -43,36 +44,20 @@ void main() {
       }
     });
 
-    test('renderPage() returns raw RGBA pixels', () async {
-      final result = await compiler.renderPage(
-        source: '= Hello',
-        pixelsPerPt: 1,
-      );
+    test('renderRaster() returns raw RGBA pixels', () async {
+      final doc = await compiler.compile(source: '= Hello');
+      final result = await doc.renderRaster(pageIndex: 0, pixelsPerPt: 1);
       expect(result.width, greaterThan(0));
       expect(result.height, greaterThan(0));
       // 4 bytes per pixel (RGBA)
       expect(result.bytes.length, equals(result.width * result.height * 4));
     });
 
-    test('compileSvg() produces valid SVG strings', () async {
-      final doc = await compiler.compileSvg(source: '= Hello, Typst!');
-      expect(doc.svgs, isNotEmpty);
-      expect(doc.svgs.first, contains('<svg'));
+    test('renderSvg() produces valid SVG strings', () async {
+      final doc = await compiler.compile(source: '= Hello, Typst!');
+      final svg = await doc.renderSvg(0);
+      expect(svg, contains('<svg'));
       expect(doc.pageCount, equals(1));
-    });
-
-    test('compileDocument() caching works for SVG renders', () async {
-      final count = await compiler.compileDocument(
-        source: '= P1\n#pagebreak()\n= P2',
-        date: DateTime.utc(2025),
-      );
-      expect(count, equals(2));
-
-      final svg0 = await compiler.renderCachedPageAsSvg();
-      expect(svg0, contains('<svg'));
-
-      final svg1 = await compiler.renderCachedPageAsSvg(pageIndex: 1);
-      expect(svg1, contains('<svg'));
     });
 
     testWidgets('TypstDocumentViewer renders without throwing', (tester) async {

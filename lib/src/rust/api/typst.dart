@@ -8,39 +8,39 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_fonts`, `map_errors`, `new`, `set_files`, `set_markup`, `set_sys_time`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SimpleWorld`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `book`, `clone`, `clone`, `file`, `fmt`, `fmt`, `font`, `library`, `main`, `source`, `today`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `book`, `clone`, `clone`, `clone`, `clone`, `clone`, `file`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `font`, `library`, `main`, `source`, `today`
 
 Future<String> getTypstVersion() =>
     RustLib.instance.api.crateApiTypstGetTypstVersion();
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CompiledDocument>>
+abstract class CompiledDocument implements RustOpaqueInterface {
+  /// Exports the document to a PDF byte array.
+  Future<Uint8List> exportPdf();
+
+  /// Exports a specific page to an SVG string.
+  Future<String> exportSvg({required BigInt index});
+
+  /// Returns the number of pages in the document.
+  Future<BigInt> pageCount();
+
+  /// Returns the dimensions of a page in points.
+  Future<PageInfo> pageInfo({required BigInt index});
+
+  /// Renders a specific page to raw RGBA pixels.
+  Future<RenderResult> renderPage({
+    required BigInt index,
+    required double pixelPerPt,
+  });
+}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<TypstEngine>>
 abstract class TypstEngine implements RustOpaqueInterface {
   /// Adds additional fonts to the engine.
   Future<void> addFonts({required List<Uint8List> fontData});
 
-  /// Compile a document and keep it in memory for fast rendering.
-  ///
-  /// Returns the total page count.
-  Future<int> compileDocument({
-    required String markup,
-    required List<VirtualFile> files,
-    PlatformInt64? sysTime,
-  });
-
-  /// Compile Typst markup to PDF bytes.
-  ///
-  /// - [markup]  — Typst source text.
-  /// - [fonts]   — Raw bytes of font files to make available to the compiler.
-  /// - [files]   — Virtual files (images, data files, includes) the markup may
-  ///               reference. Keys must match the paths used in markup exactly.
-  Future<TypstResult> compilePdf({
-    required String markup,
-    required List<VirtualFile> files,
-    PlatformInt64? sysTime,
-  });
-
-  /// Compiles Typst markup to a list of SVG strings (one per page).
-  Future<List<String>> compileSvg({
+  /// Compile Typst markup into a CompiledDocument handle.
+  Future<CompiledDocument> compile({
     required String markup,
     required List<VirtualFile> files,
     PlatformInt64? sysTime,
@@ -48,53 +48,24 @@ abstract class TypstEngine implements RustOpaqueInterface {
 
   /// Creates a new Typst engine with bundled default fonts.
   factory TypstEngine() => RustLib.instance.api.crateApiTypstTypstEngineNew();
+}
 
-  /// Renders a single page of the currently compiled document.
-  Future<RenderResult> renderCachedPage({
-    required BigInt pageIndex,
-    required double pixelPerPt,
-  });
+class PageInfo {
+  final double widthPt;
+  final double heightPt;
 
-  /// Renders a single page of the currently compiled document as an SVG string.
-  Future<String> renderCachedPageAsSvg({required BigInt pageIndex});
+  const PageInfo({required this.widthPt, required this.heightPt});
 
-  /// Render a single page of a Typst document to raw RGBA pixels.
-  ///
-  /// - [markup]       — Typst source text.
-  /// - [files]        — Virtual files the markup may reference.
-  /// - [page_index]   — Zero-based page index.
-  /// - [pixel_per_pt] — Pixels per typographic point (1pt = 1/72 inch).
-  ///                    Use 2.0 for a crisp rendering on 2× displays.
-  ///
-  /// Returns raw RGBA bytes (4 bytes per pixel), plus width and height.
-  /// Use [ui.ImageDescriptor.raw] on the Dart side to decode these into a
-  /// Flutter [ui.Image].
-  Future<RenderResult> renderPage({
-    required String markup,
-    required List<VirtualFile> files,
-    required BigInt pageIndex,
-    required double pixelPerPt,
-    PlatformInt64? sysTime,
-  });
+  @override
+  int get hashCode => widthPt.hashCode ^ heightPt.hashCode;
 
-  /// Renders a single page of a Typst document to PNG bytes.
-  ///
-  /// Equivalent to [render_page] but performs the PNG encoding inside Rust,
-  /// using `tiny_skia`'s built-in encoder — no GPU round-trip required.
-  ///
-  /// - [markup]       — Typst source text.
-  /// - [files]        — Virtual files the markup may reference.
-  /// - [page_index]   — Zero-based page index.
-  /// - [pixel_per_pt] — Pixels per typographic point; use 2.0 for HiDPI.
-  ///
-  /// Returns raw PNG bytes (`Vec<u8>`) ready to write to a file or share.
-  Future<Uint8List> renderPageAsPng({
-    required String markup,
-    required List<VirtualFile> files,
-    required BigInt pageIndex,
-    required double pixelPerPt,
-    PlatformInt64? sysTime,
-  });
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PageInfo &&
+          runtimeType == other.runtimeType &&
+          widthPt == other.widthPt &&
+          heightPt == other.heightPt;
 }
 
 /// Result of rendering a single page.
@@ -165,28 +136,6 @@ class TypstDiagnostic {
           severity == other.severity &&
           message == other.message &&
           hints == other.hints;
-}
-
-/// Result of a successful PDF compilation.
-class TypstResult {
-  /// Raw PDF bytes.
-  final Uint8List bytes;
-
-  /// Total number of pages in the compiled document.
-  final int pageCount;
-
-  const TypstResult({required this.bytes, required this.pageCount});
-
-  @override
-  int get hashCode => bytes.hashCode ^ pageCount.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is TypstResult &&
-          runtimeType == other.runtimeType &&
-          bytes == other.bytes &&
-          pageCount == other.pageCount;
 }
 
 /// A virtual file to be made available to the Typst compiler.

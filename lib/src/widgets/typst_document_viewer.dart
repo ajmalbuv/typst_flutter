@@ -1,36 +1,77 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:typst_flutter/src/compiler.dart';
+import 'package:typst_flutter/src/document.dart';
+import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
 import 'package:typst_flutter/src/fonts.dart';
+import 'package:typst_flutter/src/widgets/typst_view.dart';
 
 /// A scrollable, multi-page viewer for a Typst document.
 ///
 /// This widget compiles the Typst source **once** and lazily renders pages as
-/// they are scrolled into view. By default it renders pages using vector SVG
-/// graphics for crisp zooming, but can be configured to use rasterized images.
+/// they are scrolled into view.
+///
+/// There are two ways to use this widget:
+///
+/// **1. Self-managed compilation** (simple / standalone):
+/// ```dart
+/// TypstDocumentViewer(
+///   source: myMarkup,
+///   fonts: FontSource.assets(['assets/fonts/Roboto.ttf']),
+/// )
+/// ```
+///
+/// **2. Pre-compiled document** (shared compiler, zero per-widget cost):
+/// ```dart
+/// final compiler = await TypstCompiler.create(fonts: ...);
+/// final doc = await compiler.compile(source: myMarkup);
+///
+/// TypstDocumentViewer.document(document: doc)
+/// ```
 class TypstDocumentViewer extends StatefulWidget {
-  /// Creates a [TypstDocumentViewer].
+  /// Creates a [TypstDocumentViewer] that manages its own compilation.
   const TypstDocumentViewer({
     required this.source,
     super.key,
     this.fonts,
     this.files,
     this.date,
-    this.useSvg = true,
+    this.renderMode = TypstRenderMode.svg,
     this.pixelsPerPt = 2.0,
     this.loadingBuilder,
     this.errorBuilder,
     this.pageSpacing = 8.0,
     this.pageColor = Colors.white,
     this.pageElevation = 2.0,
-  });
+  }) : document = null;
+
+  /// Creates a [TypstDocumentViewer] from an already-compiled
+  /// [TypstDocument].
+  ///
+  /// This avoids creating a per-widget compiler and is the recommended
+  /// approach when you already have a [TypstCompiler] instance.
+  const TypstDocumentViewer.document({
+    required this.document,
+    super.key,
+    this.renderMode = TypstRenderMode.svg,
+    this.pixelsPerPt = 2.0,
+    this.loadingBuilder,
+    this.errorBuilder,
+    this.pageSpacing = 8.0,
+    this.pageColor = Colors.white,
+    this.pageElevation = 2.0,
+  }) : source = null,
+       fonts = null,
+       files = null,
+       date = null;
+
+  /// The compiled document to render (if using [TypstDocumentViewer.document]).
+  final TypstDocument? document;
 
   /// The Typst markup source to compile and render.
-  final String source;
+  final String? source;
 
   /// Font files to make available to the Typst compiler.
   final FontSource? fonts;
@@ -41,17 +82,20 @@ class TypstDocumentViewer extends StatefulWidget {
   /// The date to inject for `#datetime.today()`.
   final DateTime? date;
 
-  /// If true, renders pages as scalable SVG. If false, renders as raster images
-  final bool useSvg;
+  /// The rendering mode (SVG or Raster).
+  final TypstRenderMode renderMode;
 
-  /// Density for raster rendering (only used if [useSvg] is false).
+  /// Density for raster rendering (only used if [renderMode] is raster).
   final double pixelsPerPt;
 
   /// Builder for the loading state shown while the compiler is running.
   final WidgetBuilder? loadingBuilder;
 
   /// Builder for the error state shown when compilation fails.
-  final Widget Function(BuildContext context, Object error)? errorBuilder;
+  ///
+  /// Receives the [BuildContext] and the thrown [TypstCompileException].
+  final Widget Function(BuildContext context, TypstCompileException error)?
+  errorBuilder;
 
   /// Spacing between pages in the list.
   final double pageSpacing;
@@ -69,24 +113,54 @@ class TypstDocumentViewer extends StatefulWidget {
 class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
   TypstCompiler? _compiler;
   bool _loading = true;
-  Object? _error;
-  int _pageCount = 0;
+  TypstCompileException? _error;
+  TypstDocument? _ownedDocument;
+
+  TypstDocument? get _activeDocument => widget.document ?? _ownedDocument;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_compileDocument());
+    if (widget.document != null) {
+      // Pre-compiled document: no compilation needed.
+      _loading = false;
+    } else {
+      unawaited(_compileDocument());
+    }
   }
 
   @override
   void didUpdateWidget(TypstDocumentViewer old) {
     super.didUpdateWidget(old);
+
+    // Document-mode: re-render if the document handle changed.
+    if (widget.document != null) {
+      if (widget.document != old.document) {
+        setState(() {
+          _loading = false;
+          _error = null;
+        });
+      }
+      return;
+    }
+
+    // Source-mode: recompile if inputs changed.
     if (widget.source != old.source ||
         widget.fonts != old.fonts ||
         widget.files != old.files ||
         widget.date != old.date) {
+      if (widget.fonts != old.fonts) {
+        _compiler?.dispose();
+        _compiler = null;
+      }
       unawaited(_compileDocument());
     }
+  }
+
+  @override
+  void dispose() {
+    _compiler?.dispose();
+    super.dispose();
   }
 
   Future<void> _compileDocument() async {
@@ -100,8 +174,8 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
         fonts: widget.fonts ?? FontSource.none(),
       );
 
-      final count = await _compiler!.compileDocument(
-        source: widget.source,
+      final doc = await _compiler!.compile(
+        source: widget.source!,
         files: widget.files,
         date: widget.date,
       );
@@ -109,13 +183,19 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
       if (!mounted) return;
 
       setState(() {
-        _pageCount = count;
+        _ownedDocument = doc;
+        _loading = false;
+      });
+    } on TypstCompileException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
         _loading = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e;
+        _error = TypstCompileException(e.toString());
         _loading = false;
       });
     }
@@ -138,151 +218,29 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
           );
     }
 
+    final doc = _activeDocument;
+    if (doc == null) return const SizedBox.shrink();
+
     return ListView.separated(
       padding: EdgeInsets.symmetric(vertical: widget.pageSpacing),
-      itemCount: _pageCount,
+      itemCount: doc.pageCount,
       separatorBuilder: (context, index) =>
           SizedBox(height: widget.pageSpacing),
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: widget.pageSpacing),
-          child: Card(
-            elevation: widget.pageElevation,
-            color: widget.pageColor,
-            clipBehavior: Clip.antiAlias,
-            margin: EdgeInsets.zero,
-            child: _TypstPageRenderer(
-              compiler: _compiler!,
-              pageIndex: index,
-              useSvg: widget.useSvg,
-              pixelsPerPt: widget.pixelsPerPt,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _TypstPageRenderer extends StatefulWidget {
-  const _TypstPageRenderer({
-    required this.compiler,
-    required this.pageIndex,
-    required this.useSvg,
-    required this.pixelsPerPt,
-  });
-
-  final TypstCompiler compiler;
-  final int pageIndex;
-  final bool useSvg;
-  final double pixelsPerPt;
-
-  @override
-  State<_TypstPageRenderer> createState() => _TypstPageRendererState();
-}
-
-class _TypstPageRendererState extends State<_TypstPageRenderer> {
-  String? _svgString;
-  ui.Image? _image;
-  bool _loading = true;
-  Object? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_render());
-  }
-
-  @override
-  void didUpdateWidget(_TypstPageRenderer old) {
-    super.didUpdateWidget(old);
-    if (widget.useSvg != old.useSvg ||
-        widget.pixelsPerPt != old.pixelsPerPt ||
-        widget.pageIndex != old.pageIndex ||
-        widget.compiler != old.compiler) {
-      unawaited(_render());
-    }
-  }
-
-  @override
-  void dispose() {
-    _image?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _render() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      if (widget.useSvg) {
-        final svg = await widget.compiler.renderCachedPageAsSvg(
-          pageIndex: widget.pageIndex,
-        );
-        if (!mounted) return;
-        setState(() {
-          _svgString = svg;
-          _image?.dispose();
-          _image = null;
-          _loading = false;
-        });
-      } else {
-        final result = await widget.compiler.renderCachedPage(
-          pageIndex: widget.pageIndex,
-          pixelsPerPt: widget.pixelsPerPt,
-        );
-        final image = await result.toImage();
-        if (!mounted) {
-          image.dispose();
-          return;
-        }
-        setState(() {
-          _image?.dispose();
-          _image = image;
-          _svgString = null;
-          _loading = false;
-        });
-      }
-    } on Object catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e;
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const SizedBox(
-        height: 400,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_error != null) {
-      return SizedBox(
-        height: 400,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              _error.toString(),
-              style: const TextStyle(color: Colors.red),
-            ),
+      itemBuilder: (context, index) => Padding(
+        padding: EdgeInsets.symmetric(horizontal: widget.pageSpacing),
+        child: Card(
+          elevation: widget.pageElevation,
+          color: widget.pageColor,
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          child: TypstView(
+            document: doc,
+            pageIndex: index,
+            renderMode: widget.renderMode,
+            pixelsPerPt: widget.pixelsPerPt,
           ),
         ),
-      );
-    }
-
-    if (widget.useSvg && _svgString != null) {
-      return SvgPicture.string(_svgString!);
-    } else if (_image != null) {
-      return RawImage(image: _image, fit: BoxFit.contain);
-    }
-
-    return const SizedBox(height: 400);
+      ),
+    );
   }
 }

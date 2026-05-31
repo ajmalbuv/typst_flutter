@@ -4,10 +4,42 @@ import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
+class FakeCompiledDocument extends Fake implements api.CompiledDocument {
+  bool disposed = false;
+
+  @override
+  Future<BigInt> pageCount() async => BigInt.from(1);
+
+  @override
+  Future<api.PageInfo> pageInfo({required BigInt index}) async =>
+      const api.PageInfo(widthPt: 200, heightPt: 300);
+
+  @override
+  Future<Uint8List> exportPdf() async => Uint8List.fromList([1, 2, 3, 4]);
+
+  @override
+  Future<String> exportSvg({required BigInt index}) async => '<svg>1</svg>';
+
+  @override
+  Future<api.RenderResult> renderPage({
+    required BigInt index,
+    required double pixelPerPt,
+  }) async => api.RenderResult(
+    bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
+    width: 100,
+    height: 100,
+  );
+
+  @override
+  void dispose() {
+    disposed = true;
+  }
+}
+
 /// A manual "Fake" implementation of the TypstEngine.
 class FakeTypstEngine extends Fake implements api.TypstEngine {
   @override
-  Future<api.TypstResult> compilePdf({
+  Future<api.CompiledDocument> compile({
     required String markup,
     required List<api.VirtualFile> files,
     PlatformInt64? sysTime,
@@ -23,40 +55,23 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
         ],
       );
     }
-    return api.TypstResult(
-      bytes: Uint8List.fromList([1, 2, 3, 4]),
-      pageCount: 1,
-    );
-  }
-
-  @override
-  Future<api.RenderResult> renderPage({
-    required String markup,
-    required List<api.VirtualFile> files,
-    required BigInt pageIndex,
-    required double pixelPerPt,
-    PlatformInt64? sysTime,
-  }) async {
-    return api.RenderResult(
-      bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
-      width: 100,
-      height: 100,
-    );
+    return FakeCompiledDocument();
   }
 
   @override
   Future<void> addFonts({required List<Uint8List> fontData}) async {}
+
+  @override
+  void dispose() {}
 }
 
 /// A manual "Fake" implementation of the Rust API.
 class FakeRustLibApi extends Fake implements RustLibApi {
   @override
-  api.TypstEngine crateApiTypstTypstEngineNew() {
-    return FakeTypstEngine();
-  }
+  api.TypstEngine crateApiTypstTypstEngineNew() => FakeTypstEngine();
 
   @override
-  Future<String> crateApiTypstGetTypstVersion() async => '0.11.0-test';
+  Future<String> crateApiTypstGetTypstVersion() async => '0.14.2-test';
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -71,15 +86,14 @@ void main() {
     test('Can create a compiler instance', () async {
       final compiler = await TypstCompiler.create();
       expect(compiler, isNotNull);
-      expect(await compiler.compilerVersion, equals('0.11.0-test'));
+      expect(await compiler.compilerVersion, equals('0.14.2-test'));
     });
 
-    test('Successful compilation returns PDF bytes', () async {
+    test('Successful compilation returns a TypstDocument', () async {
       final compiler = await TypstCompiler.create();
       final doc = await compiler.compile(source: 'Hello');
 
-      expect(doc.pdf, isNotEmpty);
-      expect(doc.pdf.length, equals(4));
+      expect(doc, isA<TypstDocument>());
       expect(doc.pageCount, equals(1));
     });
 
@@ -98,35 +112,64 @@ void main() {
       );
     });
 
-    test('renderPage returns TypstRenderResult', () async {
+    test('renderRaster returns TypstRenderResult', () async {
       final compiler = await TypstCompiler.create();
-      final result = await compiler.renderPage(source: 'Hello');
+      final doc = await compiler.compile(source: 'Hello');
+      final result = await doc.renderRaster(pageIndex: 0);
 
       expect(result.width, equals(100));
       expect(result.height, equals(100));
       expect(result.bytes.length, equals(100 * 100 * 4));
     });
+
+    test('exportPdf returns bytes', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      final pdf = await doc.exportPdf();
+
+      expect(pdf.length, equals(4));
+    });
+
+    test('dispose() releases resources', () async {
+      final compiler = await TypstCompiler.create();
+      compiler.dispose();
+    });
   });
 
   group('TypstDocument', () {
-    test('fromPdf creates document with PDF bytes', () {
-      final bytes = Uint8List.fromList([1, 2, 3]);
-      final doc = TypstDocument.fromPdf(pdfBytes: bytes, pageCount: 5);
+    test('dispose() is safe to call multiple times', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
 
-      expect(doc.pdf, equals(bytes));
-      expect(doc.pageCount, equals(5));
-      expect(doc.pdfBytes, isNotNull);
-      expect(doc.svgPages, isNull);
+      doc.dispose();
     });
 
-    test('fromSvg creates document with SVG pages', () {
-      final pages = ['<svg>1</svg>', '<svg>2</svg>'];
-      final doc = TypstDocument.fromSvg(svgPages: pages);
+    test('use after dispose throws StateError', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      doc.dispose();
 
-      expect(doc.svgs, equals(pages));
-      expect(doc.pageCount, equals(2));
-      expect(doc.pdfBytes, isNull);
-      expect(doc.svgPages, isNotNull);
+      expect(doc.exportPdf, throwsStateError);
+      expect(() => doc.renderSvg(0), throwsStateError);
+      expect(() => doc.renderRaster(pageIndex: 0), throwsStateError);
+      expect(() => doc.pageInfo(0), throwsStateError);
+    });
+
+    test('renderSvg returns SVG string', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      final svg = await doc.renderSvg(0);
+
+      expect(svg, contains('<svg'));
+    });
+
+    test('pageInfo returns dimensions', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello');
+      final info = await doc.pageInfo(0);
+
+      expect(info.widthPt, equals(200));
+      expect(info.heightPt, equals(300));
     });
   });
 

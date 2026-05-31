@@ -26,27 +26,6 @@ Let me fetch the actual source files directly via the pub.dev API and raw GitHub
 
 ## Source-level Issues
 
-### 1. `TypstDocument` — dual PDF/SVG/Frame state with no type safety
-
-`TypstDocument` has three factory constructors (`fromPdf`, `fromSvg`, `fromFrame`) but is a single flat class. Both `pdf` and `svgs` throw `StateError` at runtime if you call the wrong one. This is a classic "tagged union done wrong" pattern — it's error-prone for callers and impossible to enforce at compile time. You should model this as a sealed class:
-
-```dart
-sealed class TypstDocument { ... }
-class PdfDocument extends TypstDocument { final Uint8List pdf; ... }
-class SvgDocument extends TypstDocument { final List<String> pages; ... }
-class FrameDocument extends TypstDocument { ... }
-```
-
-This way Dart's exhaustive pattern matching handles it and runtime `StateError`s become impossible.
-
----
-
-### 2. `TypstCompiler` — engine state is exposed publicly
-
-The `engine` property (`TypstEngine`, the underlying Rust handle) is `final` but public. Callers can hold a reference to the raw engine and call it directly, bypassing your Dart-side error handling, debouncing, and any future thread-safety guards. It should be `@internal` or private, with access only through the compiler's methods.
-
----
-
 ### 3. `compileDocument` returns `int` (page count) but keeps state implicitly
 
 ```dart
@@ -63,71 +42,16 @@ This API compiles and holds the document in memory server-side (in Rust), return
 
 ---
 
-### 5. `FontSource.load()` is public but shouldn't be
-
-`FontSource` is an abstract class with a `load()` method that returns raw `Uint8List` data. This is an internal implementation detail (the compiler calls it when initializing). Exposing it lets users call `load()` themselves and do whatever with the bytes, and it creates a contract you now have to maintain. Mark it `@internal` or move it to `src/`.
-
----
-
-### 6. `TypstCompileException` takes `Object error` in `errorBuilder`, not the typed exception
-
-In both `TypstView` and `TypstDocumentViewer`:
-
-```dart
-Widget errorBuilder(BuildContext context, Object error)?
-```
-
-The `error` is typed as `Object`, so callers have to downcast to `TypstCompileException` themselves to access `diagnostics`. Since you went to the trouble of building a structured `TypstDiagnostic` list, you should expose it:
-
-```dart
-Widget errorBuilder(BuildContext context, TypstCompileException error)?
-```
-
-Otherwise the whole structured error handling feature is half-hidden.
-
----
-
 ### 7. `TypstSvgView` vs `TypstView` — redundant widget pair with a boolean flag
 
 You have `TypstView` (raster), `TypstSvgView` (SVG), and `TypstDocumentViewer` with a `useSvg: bool` toggle. This is three entry points for essentially the same thing. The boolean flag on `TypstDocumentViewer` is especially fragile — it's easy to miss and it changes rendering behavior entirely. A cleaner design would be a `TypstRenderMode` enum (`raster`, `svg`) passed to a single multi-page viewer, and just one single-page widget.
 
 ---
 
-### 8. `TypstDocument.imageForPage()` is async but `heightForPage`/`widthForPage` are sync
-
-```dart
-Future<Image> imageForPage(int pageIndex)
-int? heightForPage(int pageIndex)
-int? widthForPage(int pageIndex)
-```
-
-The dimensions are available synchronously (from the frame data) but the image is async. This means callers can't properly pre-size the widget before the image loads, which causes layout jumps. You should either make all of them synchronous (by decoding the image eagerly) or provide a way to get both dimensions and image in one async call.
-
----
-
-### 9. No `dispose()` on `TypstCompiler`
-
-The compiler holds a native Rust resource (`TypstEngine`). There's no `dispose()` method in the public API, which means there's no way to release the native memory/handle explicitly. This is a resource leak for any app that creates compilers dynamically (e.g., one per document in a document picker). At minimum, implement `Finalizable` or expose a `dispose()`.
-
----
-
-### 10. `GEMINI.md` is committed to the repo root
-
-Minor but visible: there's a `GEMINI.md` file in the root (likely an AI assistant config/context file). This is a public repo and it shows up in the file listing. It doesn't affect functionality but looks unprofessional on a published package. Add it to `.pubignore` and `.gitignore`, or delete it.
-
----
-
 **Summary by severity:**
 
-| Issue                                      | Severity    |
-| ------------------------------------------ | ----------- |
-| Implicit shared state in `compileDocument` | 🔴 High     |
-| No `dispose()` on `TypstCompiler`          | 🔴 High     |
-| `TypstDocument` not a sealed class         | 🟠 Medium   |
-| Per-widget compiler in `TypstView`         | 🟠 Medium   |
-| `errorBuilder` typed as `Object`           | 🟠 Medium   |
-| `engine` publicly exposed                  | 🟡 Low      |
-| `FontSource.load()` publicly exposed       | 🟡 Low      |
-| Redundant widget pair                      | 🟡 Low      |
-| Async/sync dimension mismatch              | 🟡 Low      |
-| `GEMINI.md` in repo root                   | ⚪ Cosmetic |
+| Issue                                      | Severity  |
+| ------------------------------------------ | --------- |
+| Implicit shared state in `compileDocument` | 🔴 High   |
+| Per-widget compiler in `TypstView`         | 🟠 Medium |
+| Redundant widget pair                      | 🟡 Low    |

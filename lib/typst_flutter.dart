@@ -21,5 +21,4 @@ export 'src/exceptions.dart';
 export 'src/files.dart';
 export 'src/fonts.dart';
 export 'src/widgets/typst_document_viewer.dart';
-export 'src/widgets/typst_svg_view.dart';
 export 'src/widgets/typst_view.dart';

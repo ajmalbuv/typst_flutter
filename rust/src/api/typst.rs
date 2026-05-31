@@ -24,15 +24,6 @@ pub struct VirtualFile {
     pub bytes: Vec<u8>,
 }
 
-/// Result of a successful PDF compilation.
-#[derive(Debug, Clone)]
-pub struct TypstResult {
-    /// Raw PDF bytes.
-    pub bytes: Vec<u8>,
-    /// Total number of pages in the compiled document.
-    pub page_count: u32,
-}
-
 /// Result of rendering a single page.
 #[derive(Debug, Clone)]
 pub struct RenderResult {
@@ -42,6 +33,12 @@ pub struct RenderResult {
     pub width: u32,
     /// Height of the rendered image in pixels.
     pub height: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct PageInfo {
+    pub width_pt: f64,
+    pub height_pt: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -56,62 +53,38 @@ pub struct TypstCompileError {
     pub diagnostics: Vec<TypstDiagnostic>,
 }
 
-// ── TypstEngine — Stateful Compiler ─────────────────────────────────────────
+// ── CompiledDocument — The Opaque Handle ────────────────────────────────────
 
+#[derive(Debug)]
 #[frb(opaque)]
-pub struct TypstEngine {
-    world: SimpleWorld,
-    document: Option<PagedDocument>,
+pub struct CompiledDocument {
+    pub(crate) inner: PagedDocument,
 }
 
-impl TypstEngine {
-    /// Creates a new Typst engine with bundled default fonts.
-    #[frb(sync)]
-    pub fn new() -> Self {
-        Self {
-            world: SimpleWorld::new(),
-            document: None,
+impl CompiledDocument {
+    /// Returns the number of pages in the document.
+    pub fn page_count(&self) -> usize {
+        self.inner.pages.len()
+    }
+
+    /// Returns the dimensions of a page in points.
+    pub fn page_info(&self, index: usize) -> Result<PageInfo, String> {
+        if index >= self.inner.pages.len() {
+            return Err("Page index out of bounds".into());
         }
+        let page = &self.inner.pages[index];
+        Ok(PageInfo {
+            width_pt: page.frame.width().to_pt(),
+            height_pt: page.frame.height().to_pt(),
+        })
     }
 
-    /// Adds additional fonts to the engine.
-    pub fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
-        self.world.add_fonts(font_data);
-    }
-
-    /// Compile a document and keep it in memory for fast rendering.
-    ///
-    /// Returns the total page count.
-    pub fn compile_document(
-        &mut self,
-        markup: String,
-        files: Vec<VirtualFile>,
-        sys_time: Option<i64>,
-    ) -> Result<u32, TypstCompileError> {
-        self.world.set_markup(markup);
-        self.world.set_files(files);
-        self.world.set_sys_time(sys_time);
-
-        let document: PagedDocument = typst::compile(&self.world)
-            .output
-            .map_err(|errs| map_errors(&errs))?;
-
-        let count = document.pages.len() as u32;
-        self.document = Some(document);
-        Ok(count)
-    }
-
-    /// Renders a single page of the currently compiled document.
-    pub fn render_cached_page(
-        &self,
-        page_index: usize,
-        pixel_per_pt: f32,
-    ) -> Result<RenderResult, String> {
-        let doc = self.document.as_ref().ok_or("Document not compiled")?;
-        if page_index >= doc.pages.len() {
-            return Err("Page index out of bounds".to_string());
+    /// Renders a specific page to raw RGBA pixels.
+    pub fn render_page(&self, index: usize, pixel_per_pt: f32) -> Result<RenderResult, String> {
+        if index >= self.inner.pages.len() {
+            return Err("Page index out of bounds".into());
         }
-        let page = &doc.pages[page_index];
+        let page = &self.inner.pages[index];
         let canvas = typst_render::render(page, pixel_per_pt);
         Ok(RenderResult {
             bytes: canvas.data().to_vec(),
@@ -120,112 +93,58 @@ impl TypstEngine {
         })
     }
 
-    /// Renders a single page of the currently compiled document as an SVG string.
-    pub fn render_cached_page_as_svg(&self, page_index: usize) -> Result<String, String> {
-        let doc = self.document.as_ref().ok_or("Document not compiled")?;
-        if page_index >= doc.pages.len() {
-            return Err("Page index out of bounds".to_string());
+    /// Exports the document to a PDF byte array.
+    pub fn export_pdf(&self) -> Result<Vec<u8>, String> {
+        typst_pdf::pdf(&self.inner, &typst_pdf::PdfOptions::default()).map_err(|e| format!("{e:?}"))
+    }
+
+    /// Exports a specific page to an SVG string.
+    pub fn export_svg(&self, index: usize) -> Result<String, String> {
+        if index >= self.inner.pages.len() {
+            return Err("Page index out of bounds".into());
         }
-        let page = &doc.pages[page_index];
+        let page = &self.inner.pages[index];
         Ok(typst_svg::svg(page))
     }
+}
 
-    /// Compile Typst markup to PDF bytes.
-    pub fn compile_pdf(
-        &mut self,
-        markup: String,
-        files: Vec<VirtualFile>,
-        sys_time: Option<i64>,
-    ) -> Result<TypstResult, TypstCompileError> {
-        self.compile_document(markup, files, sys_time)?;
-        let document = self.document.as_ref().unwrap();
+// ── TypstEngine — Stateless Compiler ────────────────────────────────────────
 
-        let pdf = typst_pdf::pdf(document, &typst_pdf::PdfOptions::default()).map_err(|e| {
-            TypstCompileError {
-                diagnostics: vec![TypstDiagnostic {
-                    severity: "error".to_string(),
-                    message: format!("{e:?}"),
-                    hints: vec![],
-                }],
-            }
-        })?;
+#[frb(opaque)]
+pub struct TypstEngine {
+    world: SimpleWorld,
+}
 
-        Ok(TypstResult {
-            bytes: pdf,
-            page_count: document.pages.len() as u32,
-        })
-    }
-
-    /// Render a single page of a Typst document to raw RGBA pixels.
-    pub fn render_page(
-        &mut self,
-        markup: String,
-        files: Vec<VirtualFile>,
-        page_index: usize,
-        pixel_per_pt: f32,
-        sys_time: Option<i64>,
-    ) -> Result<RenderResult, TypstCompileError> {
-        self.compile_document(markup, files, sys_time)?;
-        self.render_cached_page(page_index, pixel_per_pt)
-            .map_err(|e| TypstCompileError {
-                diagnostics: vec![TypstDiagnostic {
-                    severity: "error".to_string(),
-                    message: e,
-                    hints: vec![],
-                }],
-            })
-    }
-
-    /// Compiles Typst markup to a list of SVG strings (one per page).
-    pub fn compile_svg(
-        &mut self,
-        markup: String,
-        files: Vec<VirtualFile>,
-        sys_time: Option<i64>,
-    ) -> Result<Vec<String>, TypstCompileError> {
-        self.compile_document(markup, files, sys_time)?;
-        let document = self.document.as_ref().unwrap();
-
-        let mut svgs = Vec::new();
-        for page in &document.pages {
-            svgs.push(typst_svg::svg(page));
+impl TypstEngine {
+    /// Creates a new Typst engine with bundled default fonts.
+    #[frb(sync)]
+    pub fn new() -> Self {
+        Self {
+            world: SimpleWorld::new(),
         }
-
-        Ok(svgs)
     }
 
-    /// Renders a single page of a Typst document to PNG bytes.
-    pub fn render_page_as_png(
+    /// Adds additional fonts to the engine.
+    pub fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
+        self.world.add_fonts(font_data);
+    }
+
+    /// Compile Typst markup into a CompiledDocument handle.
+    pub fn compile(
         &mut self,
         markup: String,
         files: Vec<VirtualFile>,
-        page_index: usize,
-        pixel_per_pt: f32,
         sys_time: Option<i64>,
-    ) -> Result<Vec<u8>, TypstCompileError> {
-        self.compile_document(markup, files, sys_time)?;
-        let document = self.document.as_ref().unwrap();
+    ) -> Result<CompiledDocument, TypstCompileError> {
+        self.world.set_markup(markup);
+        self.world.set_files(files);
+        self.world.set_sys_time(sys_time);
 
-        if page_index >= document.pages.len() {
-            return Err(TypstCompileError {
-                diagnostics: vec![TypstDiagnostic {
-                    severity: "error".to_string(),
-                    message: "Page index out of bounds".to_string(),
-                    hints: vec![],
-                }],
-            });
-        }
+        let document: PagedDocument = typst::compile(&self.world)
+            .output
+            .map_err(|errs| map_errors(&errs))?;
 
-        let page = &document.pages[page_index];
-        let canvas = typst_render::render(page, pixel_per_pt);
-
-        canvas.encode_png().map_err(|e| TypstCompileError {
-            diagnostics: vec![TypstDiagnostic {
-                severity: "error".to_string(),
-                message: format!("PNG encoding failed: {e}"),
-                hints: vec![],
-            }],
-        })
+        Ok(CompiledDocument { inner: document })
     }
 }
 
@@ -392,7 +311,6 @@ mod tests {
         let engine = TypstEngine::new();
         // Check that bundled fonts are loaded
         assert!(engine.world.fonts.len() >= 3);
-        assert!(engine.document.is_none());
     }
 
     #[test]
@@ -414,17 +332,16 @@ mod tests {
     #[test]
     fn test_basic_compilation() {
         let mut engine = TypstEngine::new();
-        let result = engine.compile_pdf("= Hello".to_string(), vec![], None);
-        assert!(result.is_ok());
-        let pdf = result.unwrap();
-        assert!(!pdf.bytes.is_empty());
-        assert_eq!(pdf.page_count, 1);
+        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let pdf = doc.export_pdf().unwrap();
+        assert!(!pdf.is_empty());
+        assert_eq!(doc.page_count(), 1);
     }
 
     #[test]
     fn test_compile_error() {
         let mut engine = TypstEngine::new();
-        let result = engine.compile_pdf("#invalid_call()".to_string(), vec![], None);
+        let result = engine.compile("#invalid_call()".to_string(), vec![], None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(!err.diagnostics.is_empty());
@@ -434,10 +351,8 @@ mod tests {
     #[test]
     fn test_svg_export() {
         let mut engine = TypstEngine::new();
-        let result = engine.compile_svg("= Hello".to_string(), vec![], None);
-        assert!(result.is_ok());
-        let svgs = result.unwrap();
-        assert_eq!(svgs.len(), 1);
-        assert!(svgs[0].contains("<svg"));
+        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let svg = doc.export_svg(0).unwrap();
+        assert!(svg.contains("<svg"));
     }
 }
