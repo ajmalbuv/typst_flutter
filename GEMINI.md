@@ -219,23 +219,6 @@ After all jobs complete:
 - [x] `lib/src/fonts.dart` — `FontSource` abstraction with `@internal` on `load()`
 - [x] `lib/src/files.dart` — `FileSource` for virtual files (images, includes)
 - [x] `lib/src/exceptions.dart` — typed `TypstCompileException` with structured diagnostics
-- [x] `lib/typst_flutter.dart` — barrel export
-- [x] `rust/Cargo.toml` — Typst 0.14.2 with `typst-pdf`, `typst-render`, `typst-svg`
-- [x] `rust/src/api/typst.rs` — `TypstEngine`, `CompiledDocument`, `SimpleWorld`
-- [x] Verified Android build (`aarch64-linux-android`)
-- [x] `.github/workflows/release.yml` — full CI pipeline
-- [x] `.github/workflows/ci.yml` — automated linting, formatting, and tests
-- [x] `bin/setup.dart` — binary downloader with checksum verification
-- [x] Unit test harness with `FakeTypstEngine` and `FakeCompiledDocument`
-- [x] Rust unit tests for core compiler, VFS normalisation, SVG export
-- [x] `TypstView` — single-page widget with `TypstRenderMode` (raster/SVG)
-- [x] `TypstView` dual constructor (`document:` / `.source()`)
-- [x] `TypstDocumentViewer` — multi-page viewer with dual constructor
-- [x] Explicit `dispose()` on `TypstCompiler` and `TypstDocument`
-- [x] Use-after-dispose guard on `TypstDocument` (throws `StateError`)
-- [x] Fixed `toPng()` image leak (ad-hoc decode + dispose when no cache)
-- [x] Removed `TypstSvgView` (replaced by `TypstView` + `TypstRenderMode.svg`)
-- [x] Removed implicit shared state (`compileDocument` / `renderCachedPage`)
 
 ### Future / nice to have
 

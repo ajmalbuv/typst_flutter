@@ -28,10 +28,8 @@ dependencies:
   http: ^1.2.0
   meta: ^1.18.0
   path: ^1.9.0
-  plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
-  ffigen: ^20.0.0
   flutter_test:
     sdk: flutter
   very_good_analysis: ^10.2.0
