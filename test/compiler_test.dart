@@ -8,10 +8,10 @@ class FakeCompiledDocument extends Fake implements api.CompiledDocument {
   bool disposed = false;
 
   @override
-  Future<BigInt> pageCount() async => BigInt.from(1);
+  BigInt pageCount() => BigInt.from(1);
 
   @override
-  Future<api.PageInfo> pageInfo({required BigInt index}) async =>
+  api.PageInfo pageInfo({required BigInt index}) =>
       const api.PageInfo(widthPt: 200, heightPt: 300);
 
   @override
@@ -71,7 +71,7 @@ class FakeRustLibApi extends Fake implements RustLibApi {
   api.TypstEngine crateApiTypstTypstEngineNew() => FakeTypstEngine();
 
   @override
-  Future<String> crateApiTypstGetTypstVersion() async => '0.14.2-test';
+  String crateApiTypstGetTypstVersion() => '0.14.2-test';
 
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
@@ -86,7 +86,7 @@ void main() {
     test('Can create a compiler instance', () async {
       final compiler = await TypstCompiler.create();
       expect(compiler, isNotNull);
-      expect(await compiler.compilerVersion, equals('0.14.2-test'));
+      expect(compiler.compilerVersion, equals('0.14.2-test'));
     });
 
     test('Successful compilation returns a TypstDocument', () async {
@@ -166,7 +166,7 @@ void main() {
     test('pageInfo returns dimensions', () async {
       final compiler = await TypstCompiler.create();
       final doc = await compiler.compile(source: 'Hello');
-      final info = await doc.pageInfo(0);
+      final info = doc.pageInfo(0);
 
       expect(info.widthPt, equals(200));
       expect(info.heightPt, equals(300));

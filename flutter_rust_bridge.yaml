@@ -1,3 +1,4 @@
 rust_root: rust
 rust_input: crate::api::typst
 dart_output: lib/src/rust
+dart_preamble: "// ignore_for_file: prefer_expression_function_bodies"

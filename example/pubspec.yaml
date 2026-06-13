@@ -25,6 +25,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter:
     sdk: flutter
+  printing: ^5.14.3
   typst_flutter:
     path: ../
 

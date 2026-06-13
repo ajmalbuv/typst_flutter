@@ -25,22 +25,14 @@ import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 /// }
 /// ```
 class TypstDocument {
-  TypstDocument._({
-    required api.CompiledDocument inner,
-    required this.pageCount,
-  }) : _inner = inner;
+  /// Creates a [TypstDocument] from the inner native handle.
+  TypstDocument.fromInner(api.CompiledDocument inner) : _inner = inner;
 
   final api.CompiledDocument _inner;
   bool _disposed = false;
 
   /// The total number of pages in the compiled document.
-  final int pageCount;
-
-  /// Creates a [TypstDocument] from the inner native handle.
-  static Future<TypstDocument> create(api.CompiledDocument inner) async {
-    final count = await inner.pageCount();
-    return TypstDocument._(inner: inner, pageCount: count.toInt());
-  }
+  int get pageCount => _inner.pageCount().toInt();
 
   void _checkNotDisposed() {
     if (_disposed) {
@@ -64,10 +56,10 @@ class TypstDocument {
   /// Gets the dimensions of a specific page in points (pt).
   ///
   /// The aspect ratio can be calculated as `widthPt / heightPt`.
-  Future<api.PageInfo> pageInfo(int pageIndex) async {
+  api.PageInfo pageInfo(int pageIndex) {
     _checkNotDisposed();
     try {
-      return await _inner.pageInfo(index: BigInt.from(pageIndex));
+      return _inner.pageInfo(index: BigInt.from(pageIndex));
     } catch (e) {
       throw TypstCompileException(e.toString());
     }

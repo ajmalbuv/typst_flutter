@@ -19,6 +19,17 @@ That's it! You're completely done.
 
 When you run `flutter build` or `flutter run`, the native Android Gradle and iOS CocoaPods build systems will automatically fetch the required prebuilt native libraries (about 15MB) in the background.
 
+## Default Built-in Fonts
+
+By default, the compiler is lightweight but comes bundled with the following core fonts to ensure your basic documents and math formulas render perfectly out of the box:
+
+- **Libertinus Serif** (Regular) - The default serif font for Typst.
+- **LinLibertine** (Regular) - Another popular serif font.
+- **DejaVu Sans Mono** - The default monospaced font for code blocks.
+- **NewCM Math** (Book) - The default font for rendering complex mathematical formulas.
+
+If you need additional fonts (e.g., custom brand fonts or emoji fonts), you can pass them via the `FontSource` API when calling `TypstCompiler.create()`.
+
 ## Basic Usage (PDF Generation)
 
 Use `TypstCompiler.create()` to initialize the engine, and pass your Typst source code to compile a high-quality PDF:

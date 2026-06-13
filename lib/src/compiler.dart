@@ -43,7 +43,8 @@ class TypstCompiler implements Finalizable {
   /// Creates a [TypstCompiler] and initialises the native bridge.
   ///
   /// [fonts] — additional font files to make available to the Typst compiler.
-  /// These are added on top of the bundled core fonts (Libertinus, NewCM Math).
+  /// These are added on top of the bundled core fonts (`Libertinus Serif`,
+  /// `LinLibertine`, `DejaVu Sans Mono`, and `NewCM Math`).
   ///
   /// This is safe to call multiple times; the native library is only
   /// initialised once.
@@ -98,7 +99,7 @@ class TypstCompiler implements Finalizable {
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
       );
-      return await TypstDocument.create(inner);
+      return TypstDocument.fromInner(inner);
     } on api.TypstCompileError catch (e) {
       throw TypstCompileException(
         'Compilation failed',
@@ -110,7 +111,7 @@ class TypstCompiler implements Finalizable {
   }
 
   /// Returns the version string of the embedded Typst compiler engine.
-  Future<String> get compilerVersion => api.getTypstVersion();
+  String get compilerVersion => api.getTypstVersion();
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 

@@ -28,6 +28,19 @@ export default defineConfig({
           label: 'Reference',
           items: [{ label: 'API & Widgets', slug: 'reference/api' }],
         },
+        {
+          label: 'External Links',
+          items: [
+            {
+              label: 'pub.dev Package',
+              link: 'https://pub.dev/packages/typst_flutter',
+            },
+            {
+              label: 'API Documentation',
+              link: 'https://pub.dev/documentation/typst_flutter/latest/',
+            },
+          ],
+        },
       ],
     }),
   ],

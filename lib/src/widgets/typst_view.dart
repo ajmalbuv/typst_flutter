@@ -180,7 +180,7 @@ class _TypstViewState extends State<TypstView> {
         throw const TypstCompileException('Page index out of bounds');
       }
 
-      final pageInfo = await doc.pageInfo(widget.pageIndex);
+      final pageInfo = doc.pageInfo(widget.pageIndex);
       if (!mounted) return;
       setState(() {
         _pageInfo = pageInfo;

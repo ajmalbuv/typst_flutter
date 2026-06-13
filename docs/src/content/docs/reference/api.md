@@ -56,7 +56,7 @@ The result of rendering a Typst document page to a raster image.
 
 ### `FontSource` & `FileSource`
 
-Abstractions for loading custom assets into the compiler.
+Abstractions for loading custom assets into the compiler. Note that the compiler already bundles essential fonts (`Libertinus Serif`, `LinLibertine`, `DejaVu Sans Mono`, and `NewCM Math`) by default.
 
 - `FontSource.none()` / `FileSource.none()`: No additional assets.
 - `FontSource.assets(...)` / `FileSource.assets(...)`: Loads files directly from Flutter assets.

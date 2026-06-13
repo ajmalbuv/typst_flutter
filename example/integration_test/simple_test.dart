@@ -14,7 +14,7 @@ void main() {
     });
 
     test('compilerVersion returns non-empty string', () async {
-      final version = await compiler.compilerVersion;
+      final version = compiler.compilerVersion;
       expect(version, isNotEmpty);
     });
 
