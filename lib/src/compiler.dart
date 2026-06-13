@@ -98,7 +98,7 @@ class TypstCompiler implements Finalizable {
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
       );
-      return await TypstDocument.create(inner);
+      return TypstDocument.fromInner(inner);
     } on api.TypstCompileError catch (e) {
       throw TypstCompileException(
         'Compilation failed',
@@ -110,7 +110,7 @@ class TypstCompiler implements Finalizable {
   }
 
   /// Returns the version string of the embedded Typst compiler engine.
-  Future<String> get compilerVersion => api.getTypstVersion();
+  String get compilerVersion => api.getTypstVersion();
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 

@@ -18,4 +18,4 @@ This document tracks remaining features required for full feature parity with `t
 - [ ] **Dynamic Font Loading**: Support lazily fetching missing fonts as new scripts are encountered during compilation, rather than requiring all fonts upfront via `FontSource`.
 - [ ] **Error Location Highlighting**: Map diagnostic spans back to line/column numbers so editors can highlight the exact text range causing the error.
 - [ ] **Global Compiler Provider**: Implement a `TypstCompilerProvider` `InheritedWidget` so `TypstView.source()` can optionally reuse a shared compiler instead of always creating a new one per widget.
-- [ ] **Synchronous Metadata API**: Refactor `page_count` and `page_info` to be `#[frb(sync)]` in Rust and synchronous getters/methods in Dart to eliminate layout jumps.
+- [x] **Synchronous Metadata API**: Refactor `page_count` and `page_info` to be `#[frb(sync)]` in Rust and synchronous getters/methods in Dart to eliminate layout jumps.

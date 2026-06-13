@@ -63,11 +63,13 @@ pub struct CompiledDocument {
 
 impl CompiledDocument {
     /// Returns the number of pages in the document.
+    #[frb(sync)]
     pub fn page_count(&self) -> usize {
         self.inner.pages.len()
     }
 
     /// Returns the dimensions of a page in points.
+    #[frb(sync)]
     pub fn page_info(&self, index: usize) -> Result<PageInfo, String> {
         if index >= self.inner.pages.len() {
             return Err("Page index out of bounds".into());
@@ -293,13 +295,9 @@ fn map_errors(errs: &[typst::diag::SourceDiagnostic]) -> TypstCompileError {
     TypstCompileError { diagnostics }
 }
 
+#[frb(sync)]
 pub fn get_typst_version() -> String {
-    typst::syntax::package::PackageVersion {
-        major: 0,
-        minor: 14,
-        patch: 2,
-    }
-    .to_string()
+    env!("TYPST_VERSION").to_string()
 }
 
 #[cfg(test)]

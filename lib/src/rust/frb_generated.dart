@@ -87,11 +87,11 @@ abstract class RustLibApi extends BaseApi {
     required BigInt index,
   });
 
-  Future<BigInt> crateApiTypstCompiledDocumentPageCount({
+  BigInt crateApiTypstCompiledDocumentPageCount({
     required CompiledDocument that,
   });
 
-  Future<PageInfo> crateApiTypstCompiledDocumentPageInfo({
+  PageInfo crateApiTypstCompiledDocumentPageInfo({
     required CompiledDocument that,
     required BigInt index,
   });
@@ -116,7 +116,7 @@ abstract class RustLibApi extends BaseApi {
 
   TypstEngine crateApiTypstTypstEngineNew();
 
-  Future<String> crateApiTypstGetTypstVersion();
+  String crateApiTypstGetTypstVersion();
 
   RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_CompiledDocument;
@@ -219,23 +219,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<BigInt> crateApiTypstCompiledDocumentPageCount({
+  BigInt crateApiTypstCompiledDocumentPageCount({
     required CompiledDocument that,
   }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCompiledDocument(
             that,
             serializer,
           );
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 3,
-            port: port_,
-          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_usize,
@@ -255,25 +250,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<PageInfo> crateApiTypstCompiledDocumentPageInfo({
+  PageInfo crateApiTypstCompiledDocumentPageInfo({
     required CompiledDocument that,
     required BigInt index,
   }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCompiledDocument(
             that,
             serializer,
           );
           sse_encode_usize(index, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 4,
-            port: port_,
-          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_page_info,
@@ -437,17 +427,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "TypstEngine_new", argNames: []);
 
   @override
-  Future<String> crateApiTypstGetTypstVersion() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
+  String crateApiTypstGetTypstVersion() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 9,
-            port: port_,
-          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1228,11 +1213,11 @@ class CompiledDocumentImpl extends RustOpaque implements CompiledDocument {
       .crateApiTypstCompiledDocumentExportSvg(that: this, index: index);
 
   /// Returns the number of pages in the document.
-  Future<BigInt> pageCount() =>
+  BigInt pageCount() =>
       RustLib.instance.api.crateApiTypstCompiledDocumentPageCount(that: this);
 
   /// Returns the dimensions of a page in points.
-  Future<PageInfo> pageInfo({required BigInt index}) => RustLib.instance.api
+  PageInfo pageInfo({required BigInt index}) => RustLib.instance.api
       .crateApiTypstCompiledDocumentPageInfo(that: this, index: index);
 
   /// Renders a specific page to raw RGBA pixels.
