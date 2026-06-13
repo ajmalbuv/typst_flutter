@@ -270,14 +270,21 @@ impl typst::World for SimpleWorld {
     }
 
     fn today(&self, offset: Option<i64>) -> Option<Datetime> {
-        self.sys_time.and_then(|timestamp| {
-            // Offset is given in hours by Typst.
-            let offset_secs = offset.unwrap_or(0) * 3600;
-            let final_timestamp = timestamp + offset_secs;
-            time::OffsetDateTime::from_unix_timestamp(final_timestamp)
-                .ok()
-                .and_then(|dt| Datetime::from_ymd(dt.year(), dt.month() as u8, dt.day()))
-        })
+        let base_timestamp = self.sys_time.unwrap_or_else(|| {
+            // Fallback to current system time if none provided
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+        });
+
+        // Offset is given in hours by Typst.
+        let offset_secs = offset.unwrap_or(0) * 3600;
+        let final_timestamp = base_timestamp + offset_secs;
+
+        time::OffsetDateTime::from_unix_timestamp(final_timestamp)
+            .ok()
+            .and_then(|dt| Datetime::from_ymd(dt.year(), dt.month() as u8, dt.day()))
     }
 }
 

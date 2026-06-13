@@ -1,3 +1,16 @@
+## 2.1.0
+
+### Optimizations & API Refinements
+
+- **Synchronous Metadata API**: `TypstDocument.pageCount`, `TypstDocument.pageInfo()`, and `TypstCompiler.compilerVersion` are now fully synchronous. By leveraging `flutter_rust_bridge` v2's `#[frb(sync)]` feature, these lightweight calls execute instantly on the main thread, eliminating `Future` overhead and preventing UI layout jumps during rendering.
+- **Dynamic Versioning**: The Rust build script now dynamically extracts the exact `typst` crate version from `Cargo.toml`. `compilerVersion` will always be perfectly accurate without manual updates.
+- **Robust Date Handling**: The Rust `SimpleWorld` environment now gracefully falls back to the native OS system time (`std::time::SystemTime::now()`) if no date is provided from Dart. This means calling `compile()` without a `date` parameter will no longer crash when evaluating `#datetime.today()` in Typst markup.
+
+### Documentation
+
+- **100% API Hover Docs**: Every public class, method, and field in the Dart API now has extensive documentation comments (`///`), providing a premium developer experience in IDEs.
+- **Bundled Fonts Documented**: The built-in core fonts (`Libertinus Serif`, `LinLibertine`, `DejaVu Sans Mono`, and `NewCM Math`) are now explicitly documented in the API so developers know what's available out-of-the-box.
+
 ## 2.0.0
 
 ### ⚠️ Breaking Changes
@@ -129,6 +142,7 @@ doc.dispose();
 - **Feature:** Truly Zero-Configuration native setup! Android and iOS builds now automatically execute `typst_flutter:setup` on the fly to download native binaries. No manual commands required.
 - **Fix:** Fixed a severe path-parsing bug on Windows where `setup.dart` crashed with a `PathNotFoundException` while writing macOS binaries.
 - **Fix:** Safely fall back to `cargokit` compilation if auto-downloads fail or the user is strictly offline.
+
 ## 1.1.0
 
 - **New:** `TypstDocumentViewer` widget for efficiently displaying multi-page documents with lazy rendering.

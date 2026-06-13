@@ -43,7 +43,8 @@ class TypstCompiler implements Finalizable {
   /// Creates a [TypstCompiler] and initialises the native bridge.
   ///
   /// [fonts] — additional font files to make available to the Typst compiler.
-  /// These are added on top of the bundled core fonts (Libertinus, NewCM Math).
+  /// These are added on top of the bundled core fonts (`Libertinus Serif`,
+  /// `LinLibertine`, `DejaVu Sans Mono`, and `NewCM Math`).
   ///
   /// This is safe to call multiple times; the native library is only
   /// initialised once.

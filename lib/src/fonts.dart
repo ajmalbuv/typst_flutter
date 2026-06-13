@@ -1,19 +1,29 @@
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
 
-/// Defines where the Typst compiler should look for fonts.
+/// Defines where the Typst compiler should look for additional fonts.
+///
+/// **Note:** The compiler already bundles the following core fonts by default
+/// for basic text, code, and math rendering:
+/// - `Libertinus Serif`
+/// - `LinLibertine`
+/// - `DejaVu Sans Mono`
+/// - `NewCM Math`
+///
+/// You only need to use [FontSource] to provide custom brand fonts or emoji
+/// fonts that are not included above.
 // ignore: one_member_abstracts
 abstract class FontSource {
   /// Base constructor for [FontSource].
   const FontSource();
 
-  /// Load fonts from Flutter assets.
+  /// Load custom fonts from Flutter assets.
   factory FontSource.assets(List<String> assetPaths) = _AssetFontSource;
 
-  /// Load fonts from raw byte data.
+  /// Load custom fonts from raw byte data.
   factory FontSource.bytes(List<Uint8List> data) = _BytesFontSource;
 
-  /// Do not provide any additional fonts (only Typst built-ins).
+  /// Do not provide any additional fonts (only use the Typst built-ins).
   factory FontSource.none() = _NoneFontSource;
 
   /// Loads the font data into memory.
