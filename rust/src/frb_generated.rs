@@ -546,6 +546,13 @@ impl SseDecode for f64 {
     }
 }
 
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -626,6 +633,19 @@ impl SseDecode for Option<i64> {
     }
 }
 
+impl SseDecode for Option<crate::api::typst::TypstSourceLocation> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::typst::TypstSourceLocation>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::api::typst::PageInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -666,13 +686,43 @@ impl SseDecode for crate::api::typst::TypstCompileError {
 impl SseDecode for crate::api::typst::TypstDiagnostic {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_severity = <String>::sse_decode(deserializer);
+        let mut var_severity = <crate::api::typst::TypstSeverity>::sse_decode(deserializer);
         let mut var_message = <String>::sse_decode(deserializer);
         let mut var_hints = <Vec<String>>::sse_decode(deserializer);
+        let mut var_spanStart =
+            <Option<crate::api::typst::TypstSourceLocation>>::sse_decode(deserializer);
+        let mut var_spanEnd =
+            <Option<crate::api::typst::TypstSourceLocation>>::sse_decode(deserializer);
         return crate::api::typst::TypstDiagnostic {
             severity: var_severity,
             message: var_message,
             hints: var_hints,
+            span_start: var_spanStart,
+            span_end: var_spanEnd,
+        };
+    }
+}
+
+impl SseDecode for crate::api::typst::TypstSeverity {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::typst::TypstSeverity::Error,
+            1 => crate::api::typst::TypstSeverity::Warning,
+            _ => unreachable!("Invalid variant for TypstSeverity: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::typst::TypstSourceLocation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_line = <u32>::sse_decode(deserializer);
+        let mut var_column = <u32>::sse_decode(deserializer);
+        return crate::api::typst::TypstSourceLocation {
+            line: var_line,
+            column: var_column,
         };
     }
 }
@@ -712,13 +762,6 @@ impl SseDecode for crate::api::typst::VirtualFile {
             path: var_path,
             bytes: var_bytes,
         };
-    }
-}
-
-impl SseDecode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
     }
 }
 
@@ -874,6 +917,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::typst::TypstDiagnostic {
             self.severity.into_into_dart().into_dart(),
             self.message.into_into_dart().into_dart(),
             self.hints.into_into_dart().into_dart(),
+            self.span_start.into_into_dart().into_dart(),
+            self.span_end.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -886,6 +931,48 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::typst::TypstDiagnostic>
     for crate::api::typst::TypstDiagnostic
 {
     fn into_into_dart(self) -> crate::api::typst::TypstDiagnostic {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::typst::TypstSeverity {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Error => 0.into_dart(),
+            Self::Warning => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::typst::TypstSeverity
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::typst::TypstSeverity>
+    for crate::api::typst::TypstSeverity
+{
+    fn into_into_dart(self) -> crate::api::typst::TypstSeverity {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::typst::TypstSourceLocation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.line.into_into_dart().into_dart(),
+            self.column.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::typst::TypstSourceLocation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::typst::TypstSourceLocation>
+    for crate::api::typst::TypstSourceLocation
+{
+    fn into_into_dart(self) -> crate::api::typst::TypstSourceLocation {
         self
     }
 }
@@ -968,6 +1055,13 @@ impl SseEncode for f64 {
     }
 }
 
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1035,6 +1129,16 @@ impl SseEncode for Option<i64> {
     }
 }
 
+impl SseEncode for Option<crate::api::typst::TypstSourceLocation> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::typst::TypstSourceLocation>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for crate::api::typst::PageInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1062,9 +1166,35 @@ impl SseEncode for crate::api::typst::TypstCompileError {
 impl SseEncode for crate::api::typst::TypstDiagnostic {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.severity, serializer);
+        <crate::api::typst::TypstSeverity>::sse_encode(self.severity, serializer);
         <String>::sse_encode(self.message, serializer);
         <Vec<String>>::sse_encode(self.hints, serializer);
+        <Option<crate::api::typst::TypstSourceLocation>>::sse_encode(self.span_start, serializer);
+        <Option<crate::api::typst::TypstSourceLocation>>::sse_encode(self.span_end, serializer);
+    }
+}
+
+impl SseEncode for crate::api::typst::TypstSeverity {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::typst::TypstSeverity::Error => 0,
+                crate::api::typst::TypstSeverity::Warning => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::typst::TypstSourceLocation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.line, serializer);
+        <u32>::sse_encode(self.column, serializer);
     }
 }
 
@@ -1102,13 +1232,6 @@ impl SseEncode for crate::api::typst::VirtualFile {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.path, serializer);
         <Vec<u8>>::sse_encode(self.bytes, serializer);
-    }
-}
-
-impl SseEncode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
     }
 }
 

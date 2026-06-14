@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
 
@@ -16,25 +17,26 @@ import 'package:meta/meta.dart';
 ///   'chapter2.typ': 'assets/typst/chapter2.typ',
 /// })
 /// ```
-// ignore: one_member_abstracts
-abstract class FileSource {
+abstract class FileSource extends Equatable {
   /// Base constructor.
   const FileSource();
 
   /// Load files from Flutter assets.
   ///
   /// [pathMap] maps virtual path (as used in markup) → Flutter asset path.
-  factory FileSource.assets(Map<String, String> pathMap) = _AssetFileSource;
+  const factory FileSource.assets(Map<String, String> pathMap) =
+      _AssetFileSource;
 
   /// Load files from raw byte data already in memory.
   ///
   /// [files] maps virtual path (as used in markup) → raw file bytes.
-  factory FileSource.bytes(Map<String, Uint8List> files) = _BytesFileSource;
+  const factory FileSource.bytes(Map<String, Uint8List> files) =
+      _BytesFileSource;
 
   /// No additional files — the compiler cannot resolve any external file
   /// references. Typst will return an error if the markup references any
   /// file (images, includes, etc.).
-  factory FileSource.none() = _NoneFileSource;
+  const factory FileSource.none() = _NoneFileSource;
 
   /// Loads all files into memory and returns them as a map of
   /// virtual path → bytes.
@@ -42,6 +44,7 @@ abstract class FileSource {
   Future<Map<String, Uint8List>> load();
 }
 
+@immutable
 class _AssetFileSource extends FileSource {
   const _AssetFileSource(this._pathMap);
   final Map<String, String> _pathMap;
@@ -55,19 +58,30 @@ class _AssetFileSource extends FileSource {
     }
     return result;
   }
+
+  @override
+  List<Object?> get props => [_pathMap];
 }
 
+@immutable
 class _BytesFileSource extends FileSource {
   const _BytesFileSource(this._files);
   final Map<String, Uint8List> _files;
 
   @override
   Future<Map<String, Uint8List>> load() async => Map.unmodifiable(_files);
+
+  @override
+  List<Object?> get props => [_files];
 }
 
+@immutable
 class _NoneFileSource extends FileSource {
   const _NoneFileSource();
 
   @override
   Future<Map<String, Uint8List>> load() async => const {};
+
+  @override
+  List<Object?> get props => [];
 }

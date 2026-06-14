@@ -91,10 +91,13 @@ class TypstDocumentViewer extends StatefulWidget {
   /// Builder for the loading state shown while the compiler is running.
   final WidgetBuilder? loadingBuilder;
 
-  /// Builder for the error state shown when compilation fails.
+  /// Builder for the error state shown when an error occurs.
   ///
-  /// Receives the [BuildContext] and the thrown [TypstCompileException].
-  final Widget Function(BuildContext context, TypstCompileException error)?
+  /// Receives the [BuildContext] and the [TypstException] that caused the
+  /// failure. Inspect the concrete type to distinguish between compile
+  /// errors ([TypstCompileException]) and render errors
+  /// ([TypstRenderException]).
+  final Widget Function(BuildContext context, TypstException error)?
   errorBuilder;
 
   /// Spacing between pages in the list.
@@ -113,7 +116,7 @@ class TypstDocumentViewer extends StatefulWidget {
 class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
   TypstCompiler? _compiler;
   bool _loading = true;
-  TypstCompileException? _error;
+  TypstException? _error;
   TypstDocument? _ownedDocument;
 
   TypstDocument? get _activeDocument => widget.document ?? _ownedDocument;
@@ -159,6 +162,7 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
 
   @override
   void dispose() {
+    _ownedDocument?.dispose();
     _compiler?.dispose();
     super.dispose();
   }
@@ -171,22 +175,31 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
 
     try {
       _compiler ??= await TypstCompiler.create(
-        fonts: widget.fonts ?? FontSource.none(),
+        fonts: widget.fonts ?? const FontSource.none(),
       );
 
+      // Capture the previous document before the async gap so we can
+      // dispose it after the new one is safely stored.
+      final previousDoc = _ownedDocument;
       final doc = await _compiler!.compile(
         source: widget.source!,
         files: widget.files,
         date: widget.date,
       );
 
-      if (!mounted) return;
+      // If the widget was disposed while we were compiling, release the
+      // newly compiled document immediately and bail out.
+      if (!mounted) {
+        doc.dispose();
+        return;
+      }
 
+      previousDoc?.dispose();
       setState(() {
         _ownedDocument = doc;
         _loading = false;
       });
-    } on TypstCompileException catch (e) {
+    } on TypstException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e;
@@ -195,7 +208,7 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = TypstCompileException(e.toString());
+        _error = TypstRenderException(e.toString());
         _loading = false;
       });
     }

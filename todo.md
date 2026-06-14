@@ -18,4 +18,27 @@ This document tracks remaining features required for full feature parity with `t
 - [ ] **Dynamic Font Loading**: Support lazily fetching missing fonts as new scripts are encountered during compilation, rather than requiring all fonts upfront via `FontSource`.
 - [ ] **Error Location Highlighting**: Map diagnostic spans back to line/column numbers so editors can highlight the exact text range causing the error.
 - [ ] **Global Compiler Provider**: Implement a `TypstCompilerProvider` `InheritedWidget` so `TypstView.source()` can optionally reuse a shared compiler instead of always creating a new one per widget.
-- [x] **Synchronous Metadata API**: Refactor `page_count` and `page_info` to be `#[frb(sync)]` in Rust and synchronous getters/methods in Dart to eliminate layout jumps.
+
+## vs. typst.ts — What's Missing
+
+typst.ts isn't just a compiler bridge — it's an ecosystem. The functional gaps (scoped to no new features, just
+table stakes parity) are: query() API for structured data extraction, source-location in error spans, and
+TypstSeverity as an enum. Everything else in the todo.md is genuinely future features.
+──────
+
+# ISSUES
+
+──────
+
+## The Short Answer
+
+Your codebase is well-architected but has real holes in four hard categories before it can be called "100% perfect
+OSS":
+──────
+
+## Why Desktop Doesn't Actually Work
+
+The README says "Android, iOS, macOS, Windows, and Linux" but pubspec.yaml only declares android and ios in
+flutter.plugin.platforms . There are also no macos/ , linux/ , or windows/ platform directories with
+CMakeLists/podspecs. The binaries are downloadable but the Flutter build system doesn't know to use them. This is
+the single highest-priority fix for pub.dev publishing.

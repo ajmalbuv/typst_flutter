@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
 
@@ -12,25 +13,25 @@ import 'package:meta/meta.dart';
 ///
 /// You only need to use [FontSource] to provide custom brand fonts or emoji
 /// fonts that are not included above.
-// ignore: one_member_abstracts
-abstract class FontSource {
+abstract class FontSource extends Equatable {
   /// Base constructor for [FontSource].
   const FontSource();
 
   /// Load custom fonts from Flutter assets.
-  factory FontSource.assets(List<String> assetPaths) = _AssetFontSource;
+  const factory FontSource.assets(List<String> assetPaths) = _AssetFontSource;
 
   /// Load custom fonts from raw byte data.
-  factory FontSource.bytes(List<Uint8List> data) = _BytesFontSource;
+  const factory FontSource.bytes(List<Uint8List> data) = _BytesFontSource;
 
   /// Do not provide any additional fonts (only use the Typst built-ins).
-  factory FontSource.none() = _NoneFontSource;
+  const factory FontSource.none() = _NoneFontSource;
 
   /// Loads the font data into memory.
   @internal
   Future<List<Uint8List>> load();
 }
 
+@immutable
 class _AssetFontSource extends FontSource {
   const _AssetFontSource(this.assetPaths);
   final List<String> assetPaths;
@@ -45,8 +46,12 @@ class _AssetFontSource extends FontSource {
     }
     return results;
   }
+
+  @override
+  List<Object?> get props => [assetPaths];
 }
 
+@immutable
 class _BytesFontSource extends FontSource {
   const _BytesFontSource(this.data);
   final List<Uint8List> data;
@@ -54,12 +59,19 @@ class _BytesFontSource extends FontSource {
   @override
   @internal
   Future<List<Uint8List>> load() async => data;
+
+  @override
+  List<Object?> get props => [data];
 }
 
+@immutable
 class _NoneFontSource extends FontSource {
   const _NoneFontSource();
 
   @override
   @internal
   Future<List<Uint8List>> load() async => [];
+
+  @override
+  List<Object?> get props => [];
 }

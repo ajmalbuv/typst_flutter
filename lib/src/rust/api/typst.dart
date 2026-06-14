@@ -8,9 +8,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_fonts`, `map_errors`, `new`, `set_files`, `set_markup`, `set_sys_time`
+// These functions are ignored because they are not marked as `pub`: `add_fonts`, `map_errors`, `new`, `resolve_span`, `set_files`, `set_markup`, `set_sys_time`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SimpleWorld`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `book`, `clone`, `clone`, `clone`, `clone`, `clone`, `file`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `font`, `library`, `main`, `source`, `today`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `book`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `file`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `font`, `library`, `main`, `source`, `today`
 
 String getTypstVersion() => RustLib.instance.api.crateApiTypstGetTypstVersion();
 
@@ -115,19 +115,38 @@ class TypstCompileError implements FrbException {
           diagnostics == other.diagnostics;
 }
 
+/// A single compiler diagnostic (error or warning).
 class TypstDiagnostic {
-  final String severity;
+  /// Severity of the diagnostic.
+  final TypstSeverity severity;
+
+  /// Human-readable error message.
   final String message;
+
+  /// Optional additional hints to help fix the error.
   final List<String> hints;
+
+  /// Start position of the offending source range, if available.
+  final TypstSourceLocation? spanStart;
+
+  /// End position of the offending source range, if available.
+  final TypstSourceLocation? spanEnd;
 
   const TypstDiagnostic({
     required this.severity,
     required this.message,
     required this.hints,
+    this.spanStart,
+    this.spanEnd,
   });
 
   @override
-  int get hashCode => severity.hashCode ^ message.hashCode ^ hints.hashCode;
+  int get hashCode =>
+      severity.hashCode ^
+      message.hashCode ^
+      hints.hashCode ^
+      spanStart.hashCode ^
+      spanEnd.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -136,7 +155,47 @@ class TypstDiagnostic {
           runtimeType == other.runtimeType &&
           severity == other.severity &&
           message == other.message &&
-          hints == other.hints;
+          hints == other.hints &&
+          spanStart == other.spanStart &&
+          spanEnd == other.spanEnd;
+}
+
+/// Severity level of a [TypstDiagnostic].
+///
+/// Mirrors `typst::diag::Severity` but is exposed through the FRB bridge
+/// as a plain enum so Dart callers get a typed value rather than a raw string.
+enum TypstSeverity {
+  /// A hard error that prevents compilation from succeeding.
+  error,
+
+  /// A warning that does not prevent compilation.
+  warning,
+}
+
+/// A source location within a Typst document.
+///
+/// Lines and columns are **1-based** to match editor conventions.
+/// Both fields are `None` when the diagnostic originates from a synthetic
+/// span (e.g. built-in library code) that has no user-visible file location.
+class TypstSourceLocation {
+  /// 1-based line number in the source file.
+  final int line;
+
+  /// 1-based column number (Unicode scalar value offset) in the source file.
+  final int column;
+
+  const TypstSourceLocation({required this.line, required this.column});
+
+  @override
+  int get hashCode => line.hashCode ^ column.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TypstSourceLocation &&
+          runtimeType == other.runtimeType &&
+          line == other.line &&
+          column == other.column;
 }
 
 /// A virtual file to be made available to the Typst compiler.
