@@ -531,6 +531,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TypstSourceLocation dco_decode_box_autoadd_typst_source_location(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_typst_source_location(raw);
+  }
+
+  @protected
   double dco_decode_f_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
@@ -540,6 +548,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double dco_decode_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -585,6 +599,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TypstSourceLocation? dco_decode_opt_box_autoadd_typst_source_location(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_typst_source_location(raw);
+  }
+
+  @protected
   PageInfo dco_decode_page_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -624,12 +648,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TypstDiagnostic dco_decode_typst_diagnostic(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return TypstDiagnostic(
-      severity: dco_decode_String(arr[0]),
+      severity: dco_decode_typst_severity(arr[0]),
       message: dco_decode_String(arr[1]),
       hints: dco_decode_list_String(arr[2]),
+      spanStart: dco_decode_opt_box_autoadd_typst_source_location(arr[3]),
+      spanEnd: dco_decode_opt_box_autoadd_typst_source_location(arr[4]),
+    );
+  }
+
+  @protected
+  TypstSeverity dco_decode_typst_severity(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return TypstSeverity.values[raw as int];
+  }
+
+  @protected
+  TypstSourceLocation dco_decode_typst_source_location(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return TypstSourceLocation(
+      line: dco_decode_u_32(arr[0]),
+      column: dco_decode_u_32(arr[1]),
     );
   }
 
@@ -755,6 +799,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TypstSourceLocation sse_decode_box_autoadd_typst_source_location(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_typst_source_location(deserializer));
+  }
+
+  @protected
   double sse_decode_f_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat32();
@@ -764,6 +816,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double sse_decode_f_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat64();
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -843,6 +901,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TypstSourceLocation? sse_decode_opt_box_autoadd_typst_source_location(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_typst_source_location(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PageInfo sse_decode_page_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_widthPt = sse_decode_f_64(deserializer);
@@ -871,14 +942,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   TypstDiagnostic sse_decode_typst_diagnostic(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_severity = sse_decode_String(deserializer);
+    var var_severity = sse_decode_typst_severity(deserializer);
     var var_message = sse_decode_String(deserializer);
     var var_hints = sse_decode_list_String(deserializer);
+    var var_spanStart = sse_decode_opt_box_autoadd_typst_source_location(
+      deserializer,
+    );
+    var var_spanEnd = sse_decode_opt_box_autoadd_typst_source_location(
+      deserializer,
+    );
     return TypstDiagnostic(
       severity: var_severity,
       message: var_message,
       hints: var_hints,
+      spanStart: var_spanStart,
+      spanEnd: var_spanEnd,
     );
+  }
+
+  @protected
+  TypstSeverity sse_decode_typst_severity(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return TypstSeverity.values[inner];
+  }
+
+  @protected
+  TypstSourceLocation sse_decode_typst_source_location(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_line = sse_decode_u_32(deserializer);
+    var var_column = sse_decode_u_32(deserializer);
+    return TypstSourceLocation(line: var_line, column: var_column);
   }
 
   @protected
@@ -910,12 +1006,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_path = sse_decode_String(deserializer);
     var var_bytes = sse_decode_list_prim_u_8_strict(deserializer);
     return VirtualFile(path: var_path, bytes: var_bytes);
-  }
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -1018,6 +1108,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_typst_source_location(
+    TypstSourceLocation self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_typst_source_location(self, serializer);
+  }
+
+  @protected
   void sse_encode_f_32(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat32(self);
@@ -1027,6 +1126,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_f_64(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat64(self);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
   }
 
   @protected
@@ -1104,6 +1209,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_typst_source_location(
+    TypstSourceLocation? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_typst_source_location(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_page_info(PageInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_f_64(self.widthPt, serializer);
@@ -1133,9 +1251,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.severity, serializer);
+    sse_encode_typst_severity(self.severity, serializer);
     sse_encode_String(self.message, serializer);
     sse_encode_list_String(self.hints, serializer);
+    sse_encode_opt_box_autoadd_typst_source_location(
+      self.spanStart,
+      serializer,
+    );
+    sse_encode_opt_box_autoadd_typst_source_location(self.spanEnd, serializer);
+  }
+
+  @protected
+  void sse_encode_typst_severity(TypstSeverity self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_typst_source_location(
+    TypstSourceLocation self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.line, serializer);
+    sse_encode_u_32(self.column, serializer);
   }
 
   @protected
@@ -1166,12 +1305,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.path, serializer);
     sse_encode_list_prim_u_8_strict(self.bytes, serializer);
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
   }
 
   @protected

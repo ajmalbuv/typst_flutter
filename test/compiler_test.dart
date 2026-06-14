@@ -1,6 +1,7 @@
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typst_flutter/src/rust/api/typst.dart' as api;
+import 'package:typst_flutter/src/rust/api/typst.dart' show TypstSeverity;
 import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
@@ -48,7 +49,7 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
       throw const api.TypstCompileError(
         diagnostics: [
           api.TypstDiagnostic(
-            severity: 'error',
+            severity: TypstSeverity.error,
             message: 'Simulated error',
             hints: [],
           ),
@@ -184,7 +185,7 @@ void main() {
     });
 
     test('none() source returns empty list', () async {
-      final source = FontSource.none();
+      const source = FontSource.none();
       final loaded = await source.load();
       expect(loaded, isEmpty);
     });

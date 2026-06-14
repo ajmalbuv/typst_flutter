@@ -17,6 +17,11 @@ class TypstCompileException extends TypstException {
   const TypstCompileException(super.message, {this.diagnostics = const []});
 
   /// Structured diagnostics from the Typst compiler.
+  ///
+  /// Each entry carries severity, the error message, optional hints,
+  /// and — after FRB codegen — optional 1-based source location fields
+  /// (`spanStart` / `spanEnd`) giving the exact line and column of
+  /// the offending range in the Typst markup.
   final List<api.TypstDiagnostic> diagnostics;
 
   @override
@@ -25,13 +30,32 @@ class TypstCompileException extends TypstException {
 
     final buffer = StringBuffer('Typst Compilation Errors:\n');
     for (final diag in diagnostics) {
-      buffer.writeln('[${diag.severity.toUpperCase()}] ${diag.message}');
+      final severity = diag.severity.name.toUpperCase();
+      final loc = diag.spanStart;
+      final locStr = loc != null ? '${loc.line}:${loc.column} \u2014 ' : '';
+      buffer.writeln('[$severity] $locStr${diag.message}');
       for (final hint in diag.hints) {
         buffer.writeln('  Hint: $hint');
       }
     }
     return buffer.toString().trim();
   }
+}
+
+/// Thrown when rendering or exporting a page of a compiled document fails.
+///
+/// This is distinct from [TypstCompileException]: a [TypstRenderException]
+/// means compilation succeeded but a subsequent render or export operation
+/// failed (e.g. an internal Typst SVG/PDF error).
+///
+/// Caller-side mistakes such as passing an invalid page index will throw a
+/// [RangeError] instead, consistent with standard Dart collection behaviour.
+class TypstRenderException extends TypstException {
+  /// Creates a [TypstRenderException] with the given [message].
+  const TypstRenderException(super.message);
+
+  @override
+  String toString() => 'TypstRenderException: $message';
 }
 
 /// Thrown when the native typst_flutter library cannot be loaded.

@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use flutter_rust_bridge::frb;
-use typst::diag::FileError;
+use typst::diag::{FileError, Severity};
 use typst::foundations::{Bytes, Datetime};
 use typst::layout::PagedDocument;
-use typst::syntax::{FileId, Source};
+use typst::syntax::{FileId, Source, Span};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Library, LibraryExt};
+use typst::{Library, LibraryExt, World};
 
 // ── Public types exposed through the FRB bridge ─────────────────────────────
 
@@ -41,11 +41,44 @@ pub struct PageInfo {
     pub height_pt: f64,
 }
 
+/// Severity level of a [TypstDiagnostic].
+///
+/// Mirrors `typst::diag::Severity` but is exposed through the FRB bridge
+/// as a plain enum so Dart callers get a typed value rather than a raw string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypstSeverity {
+    /// A hard error that prevents compilation from succeeding.
+    Error,
+    /// A warning that does not prevent compilation.
+    Warning,
+}
+
+/// A source location within a Typst document.
+///
+/// Lines and columns are **1-based** to match editor conventions.
+/// Both fields are `None` when the diagnostic originates from a synthetic
+/// span (e.g. built-in library code) that has no user-visible file location.
+#[derive(Debug, Clone)]
+pub struct TypstSourceLocation {
+    /// 1-based line number in the source file.
+    pub line: u32,
+    /// 1-based column number (Unicode scalar value offset) in the source file.
+    pub column: u32,
+}
+
+/// A single compiler diagnostic (error or warning).
 #[derive(Debug, Clone)]
 pub struct TypstDiagnostic {
-    pub severity: String,
+    /// Severity of the diagnostic.
+    pub severity: TypstSeverity,
+    /// Human-readable error message.
     pub message: String,
+    /// Optional additional hints to help fix the error.
     pub hints: Vec<String>,
+    /// Start position of the offending source range, if available.
+    pub span_start: Option<TypstSourceLocation>,
+    /// End position of the offending source range, if available.
+    pub span_end: Option<TypstSourceLocation>,
 }
 
 #[derive(Debug, Clone)]
@@ -144,7 +177,7 @@ impl TypstEngine {
 
         let document: PagedDocument = typst::compile(&self.world)
             .output
-            .map_err(|errs| map_errors(&errs))?;
+            .map_err(|errs| map_errors(&errs, &self.world))?;
 
         Ok(CompiledDocument { inner: document })
     }
@@ -290,13 +323,56 @@ impl typst::World for SimpleWorld {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn map_errors(errs: &[typst::diag::SourceDiagnostic]) -> TypstCompileError {
+/// Resolves a [Span] against [world] to a 1-based (line, column) pair.
+///
+/// Returns `None` if the span is detached (no file id) or the source cannot
+/// be retrieved — this is expected for diagnostics generated from built-in
+/// Typst library code.
+fn resolve_span(
+    span: Span,
+    world: &SimpleWorld,
+) -> Option<(TypstSourceLocation, TypstSourceLocation)> {
+    let id = span.id()?;
+    let source = world.source(id).ok()?;
+    let range = source.range(span)?;
+    let lines = source.lines();
+
+    let (start_line, start_col) = lines.byte_to_line_column(range.start)?;
+    let end_byte = range.end.saturating_sub(1);
+    let (end_line, end_col) = lines
+        .byte_to_line_column(end_byte)
+        .unwrap_or((start_line, start_col));
+
+    Some((
+        TypstSourceLocation {
+            line: (start_line + 1) as u32,
+            column: (start_col + 1) as u32,
+        },
+        TypstSourceLocation {
+            line: (end_line + 1) as u32,
+            column: (end_col + 1) as u32,
+        },
+    ))
+}
+
+fn map_errors(errs: &[typst::diag::SourceDiagnostic], world: &SimpleWorld) -> TypstCompileError {
     let diagnostics = errs
         .iter()
-        .map(|e| TypstDiagnostic {
-            severity: format!("{:?}", e.severity).to_lowercase(),
-            message: e.message.to_string(),
-            hints: e.hints.iter().map(|h| h.to_string()).collect(),
+        .map(|e| {
+            let severity = match e.severity {
+                Severity::Error => TypstSeverity::Error,
+                Severity::Warning => TypstSeverity::Warning,
+            };
+            let (span_start, span_end) = resolve_span(e.span, world)
+                .map(|(s, e)| (Some(s), Some(e)))
+                .unwrap_or((None, None));
+            TypstDiagnostic {
+                severity,
+                message: e.message.to_string(),
+                hints: e.hints.iter().map(|h| h.to_string()).collect(),
+                span_start,
+                span_end,
+            }
         })
         .collect();
     TypstCompileError { diagnostics }
@@ -350,7 +426,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(!err.diagnostics.is_empty());
-        assert_eq!(err.diagnostics[0].severity, "error");
+        assert_eq!(err.diagnostics[0].severity, TypstSeverity::Error);
     }
 
     #[test]
@@ -359,5 +435,98 @@ mod tests {
         let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
         let svg = doc.export_svg(0).unwrap();
         assert!(svg.contains("<svg"));
+    }
+
+    #[test]
+    fn test_page_info() {
+        let mut engine = TypstEngine::new();
+        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let info = doc.page_info(0).unwrap();
+        assert!(info.width_pt > 0.0);
+        assert!(info.height_pt > 0.0);
+
+        let err = doc.page_info(1);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_render_page() {
+        let mut engine = TypstEngine::new();
+        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let render = doc.render_page(0, 2.0).unwrap();
+        assert!(render.width > 0);
+        assert!(render.height > 0);
+        assert!(!render.bytes.is_empty());
+
+        let err = doc.render_page(1, 2.0);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_export_svg_out_of_bounds() {
+        let mut engine = TypstEngine::new();
+        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let err = doc.export_svg(1);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_add_fonts() {
+        let mut engine = TypstEngine::new();
+        let initial_len = engine.world.fonts.len();
+        engine.add_fonts(vec![]);
+        assert_eq!(engine.world.fonts.len(), initial_len);
+    }
+
+    #[test]
+    fn test_vfs_source_and_file() {
+        use typst::World;
+        let mut world = SimpleWorld::new();
+        let files = vec![
+            VirtualFile {
+                path: "test.png".to_string(),
+                bytes: b"fake_png_data".to_vec(),
+            },
+            VirtualFile {
+                path: "inc.typ".to_string(),
+                bytes: b"Hello".to_vec(),
+            },
+            VirtualFile {
+                path: "bad_utf8.typ".to_string(),
+                bytes: vec![0xFF, 0xFE, 0xFD],
+            },
+        ];
+        world.set_files(files);
+
+        let inc_id = typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("inc.typ"));
+        let png_id = typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("test.png"));
+        let bad_utf8_id =
+            typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("bad_utf8.typ"));
+        let missing_id =
+            typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("missing.typ"));
+
+        // test source()
+        let source_inc = world.source(inc_id).unwrap();
+        assert_eq!(source_inc.text(), "Hello");
+
+        assert!(world.source(missing_id).is_err());
+        assert!(world.source(bad_utf8_id).is_err());
+
+        // test file()
+        let file_png = world.file(png_id).unwrap();
+        assert_eq!(file_png.as_slice(), b"fake_png_data");
+
+        assert!(world.file(missing_id).is_err());
+    }
+
+    #[test]
+    fn test_sys_time() {
+        use typst::World;
+        let mut world = SimpleWorld::new();
+        world.set_sys_time(Some(1609459200)); // 2021-01-01T00:00:00Z
+        let today = world.today(None).unwrap();
+        assert_eq!(today.year(), Some(2021));
+        assert_eq!(today.month(), Some(1));
+        assert_eq!(today.day(), Some(1));
     }
 }

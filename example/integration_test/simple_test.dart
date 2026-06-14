@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:typst_flutter/src/rust/api/typst.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
 void main() {
@@ -39,7 +40,7 @@ void main() {
         fail('Should have thrown TypstCompileException');
       } on TypstCompileException catch (e) {
         expect(e.diagnostics.length, greaterThan(0));
-        expect(e.diagnostics.first.severity, equals('error'));
+        expect(e.diagnostics.first.severity, equals(TypstSeverity.error));
         expect(e.diagnostics.first.message, contains('invalid_xyz'));
       }
     });

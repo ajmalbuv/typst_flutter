@@ -30,12 +30,14 @@ class _Options {
     required this.version,
     required this.noVerify,
     required this.force,
+    required this.allPlatforms,
   });
 
   factory _Options.parse(List<String> args) {
     String? version;
     var noVerify = false;
     var force = false;
+    var allPlatforms = false;
 
     for (var i = 0; i < args.length; i++) {
       final arg = args[i];
@@ -43,6 +45,8 @@ class _Options {
         noVerify = true;
       } else if (arg == '--force') {
         force = true;
+      } else if (arg == '--all-platforms') {
+        allPlatforms = true;
       } else if (arg == '--version' && i + 1 < args.length) {
         version = args[++i];
       } else if (arg.startsWith('--version=')) {
@@ -53,12 +57,20 @@ class _Options {
       }
     }
 
-    return _Options(version: version, noVerify: noVerify, force: force);
+    return _Options(
+      version: version,
+      noVerify: noVerify,
+      force: force,
+      allPlatforms: allPlatforms,
+    );
   }
 
   final String? version;
   final bool noVerify;
   final bool force;
+
+  /// When true, download binaries for every platform (used in CI).
+  final bool allPlatforms;
 }
 
 void _printHelp() {
@@ -69,12 +81,16 @@ Downloads pre-built native Typst compiler libraries from GitHub Releases
 and places them where Flutter's build system can find them.
 Run this once after `flutter pub get`.
 
+By default only the libraries for the current host platform are downloaded.
+Use --all-platforms to download everything (useful in CI).
+
 Options:
-  --version <v>   Specific version to download (e.g. 1.0.0). Defaults to
-                  the version declared in pubspec.yaml.
-  --force         Re-download even if the correct version is already present.
-  --no-verify     Skip SHA-256 checksum verification.
-  --help          Show this help.
+  --version <v>     Specific version to download (e.g. 1.0.0). Defaults to
+                    the version declared in pubspec.yaml.
+  --force           Re-download even if the correct version is already present.
+  --no-verify       Skip SHA-256 checksum verification.
+  --all-platforms   Download binaries for every supported platform.
+  --help            Show this help.
 ''');
 }
 
@@ -90,7 +106,79 @@ class _Artifact {
   final String destination;
 }
 
-/// Returns the list of artifacts to download for every platform.
+/// Returns only the artifacts required for [platform].
+///
+/// [platform] should be `Platform.operatingSystem` (e.g. `'macos'`,
+/// `'linux'`, `'windows'`).
+///
+/// Mobile build machines (iOS builds on macOS, Android builds on any OS)
+/// include the host-OS library plus the relevant mobile artifacts so that
+/// a single CI runner can cover both the host app and the mobile target.
+List<_Artifact> _artifactsForPlatform(String platform) {
+  // Android — all 4 ABIs are always included regardless of host OS because
+  // Gradle can cross-compile from any host.
+  const androidArtifacts = [
+    _Artifact(
+      filename: 'libtypst_flutter_android_arm64.so',
+      destination: 'android/arm64-v8a/libtypst_flutter.so',
+    ),
+    _Artifact(
+      filename: 'libtypst_flutter_android_armv7.so',
+      destination: 'android/armeabi-v7a/libtypst_flutter.so',
+    ),
+    _Artifact(
+      filename: 'libtypst_flutter_android_x64.so',
+      destination: 'android/x86_64/libtypst_flutter.so',
+    ),
+    _Artifact(
+      filename: 'libtypst_flutter_android_x86.so',
+      destination: 'android/x86/libtypst_flutter.so',
+    ),
+  ];
+
+  switch (platform) {
+    case 'macos':
+      // macOS runner can also build iOS and Android.
+      return [
+        const _Artifact(
+          filename: 'libtypst_flutter_macos_universal.dylib',
+          destination: 'macos/libtypst_flutter.dylib',
+        ),
+        const _Artifact(
+          filename: 'libtypst_flutter_ios.xcframework.zip',
+          destination: 'ios/',
+        ),
+        ...androidArtifacts,
+      ];
+
+    case 'linux':
+      // Linux runner builds Linux desktop and Android.
+      return [
+        const _Artifact(
+          filename: 'libtypst_flutter_linux_x64.so',
+          destination: 'linux/libtypst_flutter.so',
+        ),
+        ...androidArtifacts,
+      ];
+
+    case 'windows':
+      // Windows runner builds Windows desktop and Android.
+      return [
+        const _Artifact(
+          filename: 'typst_flutter_windows_x64.dll',
+          destination: 'windows/typst_flutter.dll',
+        ),
+        ...androidArtifacts,
+      ];
+
+    default:
+      // Unknown host — fall back to everything so setup never silently does
+      // nothing on an unrecognised platform.
+      return _allArtifacts();
+  }
+}
+
+/// Returns artifacts for every platform. Used when --all-platforms is passed.
 List<_Artifact> _allArtifacts() => [
   // Android — all 4 ABIs
   const _Artifact(
@@ -168,8 +256,18 @@ class _Setup {
       _sha256sums = {};
     }
 
-    // Download all artifacts
-    final artifacts = _allArtifacts();
+    // Download platform-appropriate artifacts
+    final platform = Platform.operatingSystem;
+    final artifacts = _opts.allPlatforms
+        ? _allArtifacts()
+        : _artifactsForPlatform(platform);
+
+    print(
+      '  Platform     : $platform${_opts.allPlatforms ? " (all platforms mode)" : ""}',
+    );
+    print('  Artifacts    : ${artifacts.length}');
+    print('');
+
     var downloaded = 0;
 
     for (final artifact in artifacts) {
@@ -188,7 +286,7 @@ class _Setup {
 
     print('');
     print('✓ Done! Downloaded $downloaded/${artifacts.length} artifacts.');
-    print('  Android, iOS, macOS, Linux, and Windows libraries are ready.');
+    print('  Libraries for $platform are ready.');
     print('  You can now build your Flutter app without Rust installed.');
   }
 

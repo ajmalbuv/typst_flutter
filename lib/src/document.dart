@@ -56,41 +56,50 @@ class TypstDocument {
   /// Gets the dimensions of a specific page in points (pt).
   ///
   /// The aspect ratio can be calculated as `widthPt / heightPt`.
+  ///
+  /// Throws a [RangeError] if [pageIndex] is negative or ≥ [pageCount].
   api.PageInfo pageInfo(int pageIndex) {
     _checkNotDisposed();
-    try {
-      return _inner.pageInfo(index: BigInt.from(pageIndex));
-    } catch (e) {
-      throw TypstCompileException(e.toString());
-    }
+    RangeError.checkValidIndex(pageIndex, null, 'pageIndex', pageCount);
+    return _inner.pageInfo(index: BigInt.from(pageIndex));
   }
 
   /// Exports the entire document to a raw PDF byte array.
+  ///
+  /// Throws [TypstRenderException] if the PDF export fails.
   Future<Uint8List> exportPdf() async {
     _checkNotDisposed();
     try {
       return await _inner.exportPdf();
     } catch (e) {
-      throw TypstCompileException(e.toString());
+      throw TypstRenderException(e.toString());
     }
   }
 
   /// Exports a specific page to an SVG string.
+  ///
+  /// Throws a [RangeError] if [pageIndex] is negative or ≥ [pageCount].
+  /// Throws [TypstRenderException] if the SVG export fails.
   Future<String> renderSvg(int pageIndex) async {
     _checkNotDisposed();
+    RangeError.checkValidIndex(pageIndex, null, 'pageIndex', pageCount);
     try {
       return await _inner.exportSvg(index: BigInt.from(pageIndex));
     } catch (e) {
-      throw TypstCompileException(e.toString());
+      throw TypstRenderException(e.toString());
     }
   }
 
   /// Renders a specific page to raw RGBA pixels.
+  ///
+  /// Throws a [RangeError] if [pageIndex] is negative or ≥ [pageCount].
+  /// Throws [TypstRenderException] if the render fails.
   Future<TypstRenderResult> renderRaster({
     required int pageIndex,
     double pixelsPerPt = 2.0,
   }) async {
     _checkNotDisposed();
+    RangeError.checkValidIndex(pageIndex, null, 'pageIndex', pageCount);
     try {
       final result = await _inner.renderPage(
         index: BigInt.from(pageIndex),
@@ -103,7 +112,7 @@ class TypstDocument {
         height: result.height,
       );
     } catch (e) {
-      throw TypstCompileException(e.toString());
+      throw TypstRenderException(e.toString());
     }
   }
 }
@@ -171,16 +180,32 @@ class TypstRenderResult {
   }
 
   /// Internal: decodes RGBA bytes into a [ui.Image].
+  ///
+  /// All interim native objects ([ui.ImmutableBuffer], [ui.ImageDescriptor],
+  /// and [ui.Codec]) are disposed in reverse order via `try/finally`, regardless
+  /// of whether an error occurs during decoding.
   Future<ui.Image> _decodeImage() async {
     final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    final descriptor = ui.ImageDescriptor.raw(
-      buffer,
-      width: width,
-      height: height,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final codec = await descriptor.instantiateCodec();
-    final frameInfo = await codec.getNextFrame();
-    return frameInfo.image;
+    try {
+      final descriptor = ui.ImageDescriptor.raw(
+        buffer,
+        width: width,
+        height: height,
+        pixelFormat: ui.PixelFormat.rgba8888,
+      );
+      try {
+        final codec = await descriptor.instantiateCodec();
+        try {
+          final frameInfo = await codec.getNextFrame();
+          return frameInfo.image;
+        } finally {
+          codec.dispose();
+        }
+      } finally {
+        descriptor.dispose();
+      }
+    } finally {
+      buffer.dispose();
+    }
   }
 }
