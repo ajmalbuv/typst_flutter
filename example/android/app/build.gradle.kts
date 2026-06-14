@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.typst_flutter_example"
+    namespace = "com.ajmalbuv.typst_flutter_example"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.typst_flutter_example"
+        applicationId = "com.ajmalbuv.typst_flutter_example"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
