@@ -1,0 +1,67 @@
+name: Build Windows Example
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          cd example
+          flutter pub get
+
+      - name: Build Rust Library
+        run: |
+          cd rust
+          cargo build --release
+
+      - name: Prepare Prebuilt Library
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .typst_flutter_prebuilt/windows
+          Copy-Item -Path rust/target/release/typst_flutter.dll -Destination .typst_flutter_prebuilt/windows/typst_flutter.dll -Force
+
+      - name: Build Flutter Example (Windows)
+        run: |
+          cd example
+          flutter build windows --release
+
+      - name: Package Artifact
+        shell: pwsh
+        run: |
+          $buildDir = "example/build/windows/x64/runner/Release"
+          $artifactName = "typst_flutter_example_windows_x64"
+          $zipPath = "$artifactName.zip"
+          
+          if (!(Test-Path $buildDir)) {
+            Write-Error "Build directory not found: $buildDir"
+            exit 1
+          }
+
+          Write-Host "Contents of build directory:"
+          Get-ChildItem -Path $buildDir | Select-Object Name, @{Name="Size(MB)";Expression={$_.Length / 1MB}}
+          
+          Compress-Archive -Path "$buildDir/*" -DestinationPath $zipPath
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: typst_flutter_example_windows_x64
+          path: typst_flutter_example_windows_x64.zip
