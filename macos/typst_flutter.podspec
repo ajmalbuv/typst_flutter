@@ -19,6 +19,11 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
 
-  # Tell CocoaPods to bundle the pre-built macOS dynamic library
-  s.vendored_libraries = '../.typst_flutter_prebuilt/macos/libtypst_flutter.dylib'
+  # Tell CocoaPods to bundle the pre-built macOS XCFramework
+  s.vendored_frameworks = '../.typst_flutter_prebuilt/macos/typst_flutter.xcframework'
+
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/typst_flutter.framework/Versions/A/typst_flutter'
+  }
 end

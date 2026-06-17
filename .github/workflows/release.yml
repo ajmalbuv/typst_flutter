@@ -196,21 +196,30 @@ jobs:
         run: cargo build --target aarch64-apple-darwin --release
         working-directory: rust
 
-      - name: Create universal dylib
+      - name: Create macOS XCFramework
         run: |
+          # Create the universal fat static library
           lipo -create \
-            rust/target/x86_64-apple-darwin/release/libtypst_flutter.dylib \
-            rust/target/aarch64-apple-darwin/release/libtypst_flutter.dylib \
-            -output libtypst_flutter_macos_universal.dylib
+            rust/target/x86_64-apple-darwin/release/libtypst_flutter.a \
+            rust/target/aarch64-apple-darwin/release/libtypst_flutter.a \
+            -output rust/target/libtypst_flutter_macos_universal.a
+
+          # Wrap it in an XCFramework
+          xcodebuild -create-xcframework \
+            -library rust/target/libtypst_flutter_macos_universal.a \
+            -output typst_flutter.xcframework
+
+      - name: Zip XCFramework
+        run: zip -r libtypst_flutter_macos.xcframework.zip typst_flutter.xcframework
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-lib
-          path: libtypst_flutter_macos_universal.dylib
+          path: libtypst_flutter_macos.xcframework.zip
 
       - uses: softprops/action-gh-release@v1
         with:
-          files: libtypst_flutter_macos_universal.dylib
+          files: libtypst_flutter_macos.xcframework.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

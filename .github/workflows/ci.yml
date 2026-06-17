@@ -47,7 +47,7 @@ jobs:
       - name: Audit dependencies
         uses: actions-rust-lang/audit@v1
         with:
-          working-directory: rust
+          workingDirectory: rust
 
   dart-test:
     strategy:
@@ -70,7 +70,7 @@ jobs:
       - name: Upload Dart Coverage
         uses: codecov/codecov-action@v7
         with:
-          file: coverage/lcov.info
+          files: coverage/lcov.info
           flags: dart
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Install Linux dependencies
@@ -105,6 +105,6 @@ jobs:
       - name: Upload Rust Coverage
         uses: codecov/codecov-action@v7
         with:
-          file: rust/lcov.info
+          files: rust/lcov.info
           flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
