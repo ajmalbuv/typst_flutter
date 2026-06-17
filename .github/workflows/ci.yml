@@ -67,6 +67,8 @@ jobs:
         run: just get
       - name: Run tests with coverage
         run: just test-coverage
+      - name: Filter coverage (exclude generated code)
+        run: dart run tool/filter_lcov.dart
       - name: Upload Dart Coverage
         uses: codecov/codecov-action@v7
         with:
