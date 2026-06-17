@@ -9,9 +9,15 @@ let package = Package(
     products: [
         .library(name: "typst-flutter", targets: ["typst_flutter"])
     ],
+    dependencies: [
+        .package(name: "FlutterFramework", path: "../FlutterFramework")
+    ],
     targets: [
         .target(
             name: "typst_flutter",
+            dependencies: [
+                .product(name: "FlutterFramework", package: "FlutterFramework")
+            ],
             path: "Sources/typst_flutter",
             publicHeadersPath: "."
         )
