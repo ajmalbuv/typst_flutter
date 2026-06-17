@@ -234,10 +234,10 @@ After all jobs complete:
 ### `rust/Cargo.toml` key dependencies
 
 ```toml
-typst = "0.14.2"          # core compiler
-typst-pdf = "0.14.2"      # PDF export
-typst-render = "0.14.2"   # raster image render (RGBA pixels)
-typst-svg = "0.14.2"      # SVG export
+typst = "0.15.0"          # core compiler
+typst-pdf = "0.15.0"      # PDF export
+typst-render = "0.15.0"   # raster image render (RGBA pixels)
+typst-svg = "0.15.0"      # SVG export
 flutter_rust_bridge = "2"  # Dart ↔ Rust bridge
 time = "0.3"               # date/time for typst::World::today()
 ```

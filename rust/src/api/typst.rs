@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use flutter_rust_bridge::frb;
-use typst::diag::{FileError, Severity};
-use typst::foundations::{Bytes, Datetime};
-use typst::layout::PagedDocument;
-use typst::syntax::{FileId, Source, Span};
+use typst::diag::FileError;
+use typst::foundations::{Bytes, Datetime, Duration};
+use typst::syntax::{DiagSpan, DiagSpanKind, FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
+use typst_layout::PagedDocument;
+use typst_utils::Scalar;
 
 // ── Public types exposed through the FRB bridge ─────────────────────────────
 
@@ -98,16 +99,16 @@ impl CompiledDocument {
     /// Returns the number of pages in the document.
     #[frb(sync)]
     pub fn page_count(&self) -> usize {
-        self.inner.pages.len()
+        self.inner.pages().len()
     }
 
     /// Returns the dimensions of a page in points.
     #[frb(sync)]
     pub fn page_info(&self, index: usize) -> Result<PageInfo, String> {
-        if index >= self.inner.pages.len() {
+        if index >= self.inner.pages().len() {
             return Err("Page index out of bounds".into());
         }
-        let page = &self.inner.pages[index];
+        let page = &self.inner.pages()[index];
         Ok(PageInfo {
             width_pt: page.frame.width().to_pt(),
             height_pt: page.frame.height().to_pt(),
@@ -116,11 +117,17 @@ impl CompiledDocument {
 
     /// Renders a specific page to raw RGBA pixels.
     pub fn render_page(&self, index: usize, pixel_per_pt: f32) -> Result<RenderResult, String> {
-        if index >= self.inner.pages.len() {
+        if index >= self.inner.pages().len() {
             return Err("Page index out of bounds".into());
         }
-        let page = &self.inner.pages[index];
-        let canvas = typst_render::render(page, pixel_per_pt);
+        let page = &self.inner.pages()[index];
+        let canvas = typst_render::render(
+            page,
+            &typst_render::RenderOptions {
+                pixel_per_pt: Scalar::new(pixel_per_pt as f64),
+                ..Default::default()
+            },
+        );
         Ok(RenderResult {
             bytes: canvas.data().to_vec(),
             width: canvas.width(),
@@ -135,11 +142,11 @@ impl CompiledDocument {
 
     /// Exports a specific page to an SVG string.
     pub fn export_svg(&self, index: usize) -> Result<String, String> {
-        if index >= self.inner.pages.len() {
+        if index >= self.inner.pages().len() {
             return Err("Page index out of bounds".into());
         }
-        let page = &self.inner.pages[index];
-        Ok(typst_svg::svg(page))
+        let page = &self.inner.pages()[index];
+        Ok(typst_svg::svg(page, &typst_svg::SvgOptions::default()))
     }
 }
 
@@ -175,7 +182,8 @@ impl TypstEngine {
         self.world.set_files(files);
         self.world.set_sys_time(sys_time);
 
-        let document: PagedDocument = typst::compile(&self.world)
+        let warned = typst::compile::<PagedDocument>(&self.world);
+        let document: PagedDocument = warned
             .output
             .map_err(|errs| map_errors(&errs, &self.world))?;
 
@@ -215,7 +223,10 @@ impl SimpleWorld {
             book: LazyHash::new(FontBook::from_fonts(&fonts)),
             fonts,
             source: Source::new(
-                FileId::new(None, typst::syntax::VirtualPath::new("main.typ")),
+                FileId::new(RootedPath::new(
+                    VirtualRoot::Project,
+                    VirtualPath::new("main.typ").unwrap(),
+                )),
                 "".into(),
             ),
             files: HashMap::new(),
@@ -274,15 +285,15 @@ impl typst::World for SimpleWorld {
 
         // Included `.typ` files: look them up in the virtual file system,
         // parse the bytes as UTF-8, and return a fresh Source.
-        let vpath = id.vpath().as_rootless_path();
-        let key = vpath.to_string_lossy().replace('\\', "/");
+        let vpath = id.vpath();
+        let key = vpath.get_without_slash().replace('\\', "/");
 
         match self.files.get(&key) {
             Some(bytes) => {
                 let text = std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
                 Ok(Source::new(id, text.to_string()))
             }
-            None => Err(FileError::NotFound(vpath.into())),
+            None => Err(FileError::NotFound(vpath.get_without_slash().into())),
         }
     }
 
@@ -293,16 +304,16 @@ impl typst::World for SimpleWorld {
     fn file(&self, id: FileId) -> Result<Bytes, FileError> {
         // Resolve the virtual path to a normalised forward-slash string and
         // look it up in our in-memory virtual file system.
-        let vpath = id.vpath().as_rootless_path();
-        let key = vpath.to_string_lossy().replace('\\', "/");
+        let vpath = id.vpath();
+        let key = vpath.get_without_slash().replace('\\', "/");
 
         self.files
             .get(&key)
             .cloned()
-            .ok_or_else(|| FileError::NotFound(vpath.into()))
+            .ok_or_else(|| FileError::NotFound(vpath.get_without_slash().into()))
     }
 
-    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
         let base_timestamp = self.sys_time.unwrap_or_else(|| {
             // Fallback to current system time if none provided
             std::time::SystemTime::now()
@@ -311,8 +322,8 @@ impl typst::World for SimpleWorld {
                 .as_secs() as i64
         });
 
-        // Offset is given in hours by Typst.
-        let offset_secs = offset.unwrap_or(0) * 3600;
+        // Offset is given as a Duration by Typst.
+        let offset_secs = offset.map(|d| d.seconds() as i64).unwrap_or(0);
         let final_timestamp = base_timestamp + offset_secs;
 
         time::OffsetDateTime::from_unix_timestamp(final_timestamp)
@@ -323,18 +334,24 @@ impl typst::World for SimpleWorld {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Resolves a [Span] against [world] to a 1-based (line, column) pair.
+/// Resolves a [DiagSpan] against [world] to a 1-based (line, column) pair.
 ///
 /// Returns `None` if the span is detached (no file id) or the source cannot
 /// be retrieved — this is expected for diagnostics generated from built-in
 /// Typst library code.
 fn resolve_span(
-    span: Span,
+    diag_span: DiagSpan,
     world: &SimpleWorld,
 ) -> Option<(TypstSourceLocation, TypstSourceLocation)> {
-    let id = span.id()?;
+    let (id, range) = match diag_span.get() {
+        DiagSpanKind::Number { id, num, sub_range } => {
+            (id, world.source(id).ok()?.range(num, sub_range)?)
+        }
+        DiagSpanKind::Range { id, range } => (id, range),
+        DiagSpanKind::Detached => return None,
+    };
+
     let source = world.source(id).ok()?;
-    let range = source.range(span)?;
     let lines = source.lines();
 
     let (start_line, start_col) = lines.byte_to_line_column(range.start)?;
@@ -360,8 +377,8 @@ fn map_errors(errs: &[typst::diag::SourceDiagnostic], world: &SimpleWorld) -> Ty
         .iter()
         .map(|e| {
             let severity = match e.severity {
-                Severity::Error => TypstSeverity::Error,
-                Severity::Warning => TypstSeverity::Warning,
+                typst::diag::Severity::Error => TypstSeverity::Error,
+                typst::diag::Severity::Warning => TypstSeverity::Warning,
             };
             let (span_start, span_end) = resolve_span(e.span, world)
                 .map(|(s, e)| (Some(s), Some(e)))
@@ -369,7 +386,7 @@ fn map_errors(errs: &[typst::diag::SourceDiagnostic], world: &SimpleWorld) -> Ty
             TypstDiagnostic {
                 severity,
                 message: e.message.to_string(),
-                hints: e.hints.iter().map(|h| h.to_string()).collect(),
+                hints: e.hints.iter().map(|h| h.v.to_string()).collect(),
                 span_start,
                 span_end,
             }
@@ -498,12 +515,22 @@ mod tests {
         ];
         world.set_files(files);
 
-        let inc_id = typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("inc.typ"));
-        let png_id = typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("test.png"));
-        let bad_utf8_id =
-            typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("bad_utf8.typ"));
-        let missing_id =
-            typst::syntax::FileId::new(None, typst::syntax::VirtualPath::new("missing.typ"));
+        let inc_id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("inc.typ").unwrap(),
+        ));
+        let png_id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("test.png").unwrap(),
+        ));
+        let bad_utf8_id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("bad_utf8.typ").unwrap(),
+        ));
+        let missing_id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("missing.typ").unwrap(),
+        ));
 
         // test source()
         let source_inc = world.source(inc_id).unwrap();
