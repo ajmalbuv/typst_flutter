@@ -16,7 +16,7 @@ jobs:
   dart-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
@@ -31,13 +31,13 @@ jobs:
   rust-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: swatinem/rust-cache@v2
         with:
-          working-directory: rust
+          workspaces: rust
       - name: Check format
         run: cargo fmt --all -- --check
         working-directory: rust
@@ -45,9 +45,8 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
         working-directory: rust
       - name: Audit dependencies
-        uses: rustsec/audit-check@v2.0.0
+        uses: actions-rust-lang/audit@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           working-directory: rust
 
   dart-test:
@@ -57,7 +56,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: subosito/flutter-action@v2
         with:
           channel: "stable"
@@ -69,7 +68,7 @@ jobs:
       - name: Run tests with coverage
         run: just test-coverage
       - name: Upload Dart Coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           file: coverage/lcov.info
           flags: dart
@@ -93,18 +92,18 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@just
       - uses: swatinem/rust-cache@v2
         with:
-          working-directory: rust
+          workspaces: rust
       - name: Run tests with coverage
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
         working-directory: rust
       - name: Upload Rust Coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           file: rust/lcov.info
           flags: rust

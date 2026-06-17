@@ -5,6 +5,11 @@ analyzer:
   strong-mode:
     implicit-dynamic: false
 
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
   exclude:
     # FRB auto-generated files — do not lint
     - lib/src/rust/frb_generated.dart

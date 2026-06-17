@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.author           = { 'Ajmal' => 'email@example.com' }
 
   s.source           = { :path => '.' }
-  s.source_files     = 'typst_flutter/Sources/typst_flutter/**/*'
+  s.source_files     = 'Classes/**/*'
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '10.11'
