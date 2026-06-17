@@ -18,15 +18,8 @@ Pod::Spec.new do |s|
   s.platform = :osx, '10.11'
   s.swift_version = '5.0'
 
-  # Link the pre-built Rust static library directly.
-  # We use vendored_libraries with a .a file instead of wrapping it in an
-  # xcframework + vendored_frameworks, because the latter causes an Xcode
-  # "Cycle inside" build error — Xcode's Eager Linking TBD generation
-  # creates a circular dependency with the framework link output.
-  s.vendored_libraries = '../.typst_flutter_prebuilt/macos/libtypst_flutter.a'
-
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'OTHER_LDFLAGS' => '-force_load ${PODS_ROOT}/../.typst_flutter_prebuilt/macos/libtypst_flutter.a',
+    'OTHER_LDFLAGS' => '-force_load "$(PODS_TARGET_SRCROOT)/../.typst_flutter_prebuilt/macos/libtypst_flutter.a"',
   }
 end
