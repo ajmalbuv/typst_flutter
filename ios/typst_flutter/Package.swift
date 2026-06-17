@@ -12,11 +12,8 @@ let package = Package(
     targets: [
         .target(
             name: "typst_flutter",
-            dependencies: [],
             path: "Sources/typst_flutter",
-            cSettings: [
-                .headerSearchPath("include")
-            ]
+            publicHeadersPath: "."
         )
     ]
 )
