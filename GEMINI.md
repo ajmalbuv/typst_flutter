@@ -195,7 +195,7 @@ Triggered by `git push tag v*`. Runs 8 parallel jobs:
 | -------------------- | ----------------------------------- | ------------------------ |
 | `build-linux-x64`    | `x86_64-unknown-linux-gnu`          | `libtypst_flutter.so`    |
 | `build-linux-arm64`  | `aarch64-unknown-linux-gnu`         | `libtypst_flutter.so`    |
-| `build-macos`        | universal (x64 + arm64)             | `libtypst_flutter.dylib` |
+| `build-macos`        | universal (x64 + arm64)             | `libtypst_flutter.a`     |
 | `build-windows-x64`  | `x86_64-pc-windows-msvc`            | `typst_flutter.dll`      |
 | `build-android` (×4) | arm64-v8a, armeabi-v7a, x86_64, x86 | `.so` per ABI            |
 | `build-ios`          | device + simulator xcframework      | `.xcframework`           |

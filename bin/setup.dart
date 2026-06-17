@@ -141,8 +141,8 @@ List<_Artifact> _artifactsForPlatform(String platform) {
       // macOS runner can also build iOS and Android.
       return [
         const _Artifact(
-          filename: 'libtypst_flutter_macos.xcframework.zip',
-          destination: 'macos/',
+          filename: 'libtypst_flutter_macos.a',
+          destination: 'macos/libtypst_flutter.a',
         ),
         const _Artifact(
           filename: 'libtypst_flutter_ios.xcframework.zip',
@@ -212,8 +212,8 @@ List<_Artifact> _allArtifacts() => [
     destination: 'windows/typst_flutter.dll',
   ),
   const _Artifact(
-    filename: 'libtypst_flutter_macos.xcframework.zip',
-    destination: 'macos/',
+    filename: 'libtypst_flutter_macos.a',
+    destination: 'macos/libtypst_flutter.a',
   ),
 ];
 
