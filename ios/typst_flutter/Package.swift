@@ -1,0 +1,22 @@
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "typst_flutter",
+    platforms: [
+        .iOS(.v13)
+    ],
+    products: [
+        .library(name: "typst-flutter", targets: ["typst_flutter"])
+    ],
+    targets: [
+        .target(
+            name: "typst_flutter",
+            dependencies: [],
+            path: "Sources/typst_flutter",
+            cSettings: [
+                .headerSearchPath("include")
+            ]
+        )
+    ]
+)
