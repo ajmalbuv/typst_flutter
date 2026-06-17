@@ -72,7 +72,6 @@ jobs:
         with:
           files: coverage/lcov.info
           flags: dart
-          token: ${{ secrets.CODECOV_TOKEN }}
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -100,11 +99,10 @@ jobs:
         with:
           workspaces: rust
       - name: Run tests with coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --ignore-filename-regex "frb_generated"
         working-directory: rust
       - name: Upload Rust Coverage
         uses: codecov/codecov-action@v7
         with:
           files: rust/lcov.info
           flags: rust
-          token: ${{ secrets.CODECOV_TOKEN }}
