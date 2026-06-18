@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 134818825;
+  int get rustContentHash => 1798882019;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -100,6 +100,10 @@ abstract class RustLibApi extends BaseApi {
     required CompiledDocument that,
     required BigInt index,
     required double pixelPerPt,
+  });
+
+  List<TypstDiagnostic> crateApiTypstCompiledDocumentWarnings({
+    required CompiledDocument that,
   });
 
   Future<void> crateApiTypstTypstEngineAddFonts({
@@ -323,6 +327,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  List<TypstDiagnostic> crateApiTypstCompiledDocumentWarnings({
+    required CompiledDocument that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCompiledDocument(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_typst_diagnostic,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiTypstCompiledDocumentWarningsConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTypstCompiledDocumentWarningsConstMeta =>
+      const TaskConstMeta(
+        debugName: "CompiledDocument_warnings",
+        argNames: ["that"],
+      );
+
+  @override
   Future<void> crateApiTypstTypstEngineAddFonts({
     required TypstEngine that,
     required List<Uint8List> fontData,
@@ -339,7 +374,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -381,7 +416,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -409,7 +444,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -432,7 +467,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1362,6 +1397,13 @@ class CompiledDocumentImpl extends RustOpaque implements CompiledDocument {
     index: index,
     pixelPerPt: pixelPerPt,
   );
+
+  /// Returns any compiler warnings emitted during compilation.
+  ///
+  /// These are non-fatal diagnostics (e.g. deprecated syntax, ambiguous
+  /// layout) that did not prevent compilation but may indicate issues.
+  List<TypstDiagnostic> warnings() =>
+      RustLib.instance.api.crateApiTypstCompiledDocumentWarnings(that: this);
 }
 
 @sealed

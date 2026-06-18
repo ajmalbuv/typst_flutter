@@ -34,6 +34,12 @@ class TypstDocument {
   /// The total number of pages in the compiled document.
   int get pageCount => _inner.pageCount().toInt();
 
+  /// Any compiler warnings emitted during compilation.
+  ///
+  /// These are non-fatal diagnostics (e.g. deprecated syntax, ambiguous layout)
+  /// that did not prevent compilation but may indicate issues.
+  List<api.TypstDiagnostic> get warnings => _inner.warnings();
+
   void _checkNotDisposed() {
     if (_disposed) {
       throw StateError(

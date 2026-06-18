@@ -20,5 +20,7 @@ export 'src/document.dart';
 export 'src/exceptions.dart';
 export 'src/files.dart';
 export 'src/fonts.dart';
+export 'src/rust/api/typst.dart'
+    show PageInfo, TypstDiagnostic, TypstSeverity, TypstSourceLocation;
 export 'src/widgets/typst_document_viewer.dart';
 export 'src/widgets/typst_view.dart';

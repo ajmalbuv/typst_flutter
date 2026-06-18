@@ -8,7 +8,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_fonts`, `map_errors`, `new`, `resolve_span`, `set_files`, `set_markup`, `set_sys_time`
+// These functions are ignored because they are not marked as `pub`: `add_fonts`, `map_diagnostic`, `map_errors`, `new`, `resolve_span`, `set_files`, `set_markup`, `set_sys_time`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SimpleWorld`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `book`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `file`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `font`, `library`, `main`, `source`, `today`
 
@@ -33,6 +33,12 @@ abstract class CompiledDocument implements RustOpaqueInterface {
     required BigInt index,
     required double pixelPerPt,
   });
+
+  /// Returns any compiler warnings emitted during compilation.
+  ///
+  /// These are non-fatal diagnostics (e.g. deprecated syntax, ambiguous
+  /// layout) that did not prevent compilation but may indicate issues.
+  List<TypstDiagnostic> warnings();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<TypstEngine>>

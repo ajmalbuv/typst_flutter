@@ -2897,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "typst_flutter"
-version = "1.0.0"
+version = "2.2.0"
 dependencies = [
  "comemo",
  "flutter_rust_bridge",

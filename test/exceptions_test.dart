@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart'
-    show TypstDiagnostic, TypstSeverity, TypstSourceLocation;
 import 'package:typst_flutter/typst_flutter.dart';
 
 void main() {

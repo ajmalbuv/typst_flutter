@@ -1,7 +1,6 @@
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typst_flutter/src/rust/api/typst.dart' as api;
-import 'package:typst_flutter/src/rust/api/typst.dart' show TypstSeverity;
 import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 

@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 134818825;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1798882019;
 
 // Section: executor
 
@@ -298,6 +298,54 @@ fn wire__crate__api__typst__CompiledDocument_render_page_impl(
                     Ok(output_ok)
                 })())
             }
+        },
+    )
+}
+fn wire__crate__api__typst__CompiledDocument_warnings_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "CompiledDocument_warnings",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CompiledDocument>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok = Result::<_, ()>::Ok(
+                    crate::api::typst::CompiledDocument::warnings(&*api_that_guard),
+                )?;
+                Ok(output_ok)
+            })())
         },
     )
 }
@@ -799,8 +847,8 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        6 => wire__crate__api__typst__TypstEngine_add_fonts_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__typst__TypstEngine_compile_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__typst__TypstEngine_add_fonts_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__typst__TypstEngine_compile_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -815,8 +863,9 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         3 => wire__crate__api__typst__CompiledDocument_page_count_impl(ptr, rust_vec_len, data_len),
         4 => wire__crate__api__typst__CompiledDocument_page_info_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__typst__TypstEngine_new_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__typst__get_typst_version_impl(ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__typst__CompiledDocument_warnings_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__typst__TypstEngine_new_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__typst__get_typst_version_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

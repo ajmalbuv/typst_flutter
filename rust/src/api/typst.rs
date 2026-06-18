@@ -93,6 +93,7 @@ pub struct TypstCompileError {
 #[frb(opaque)]
 pub struct CompiledDocument {
     pub(crate) inner: PagedDocument,
+    pub(crate) warnings: Vec<TypstDiagnostic>,
 }
 
 impl CompiledDocument {
@@ -100,6 +101,15 @@ impl CompiledDocument {
     #[frb(sync)]
     pub fn page_count(&self) -> usize {
         self.inner.pages().len()
+    }
+
+    /// Returns any compiler warnings emitted during compilation.
+    ///
+    /// These are non-fatal diagnostics (e.g. deprecated syntax, ambiguous
+    /// layout) that did not prevent compilation but may indicate issues.
+    #[frb(sync)]
+    pub fn warnings(&self) -> Vec<TypstDiagnostic> {
+        self.warnings.clone()
     }
 
     /// Returns the dimensions of a page in points.
@@ -183,11 +193,21 @@ impl TypstEngine {
         self.world.set_sys_time(sys_time);
 
         let warned = typst::compile::<PagedDocument>(&self.world);
+
+        let warnings: Vec<TypstDiagnostic> = warned
+            .warnings
+            .iter()
+            .map(|w| map_diagnostic(w, &self.world))
+            .collect();
+
         let document: PagedDocument = warned
             .output
             .map_err(|errs| map_errors(&errs, &self.world))?;
 
-        Ok(CompiledDocument { inner: document })
+        Ok(CompiledDocument {
+            inner: document,
+            warnings,
+        })
     }
 }
 
@@ -372,27 +392,30 @@ fn resolve_span(
     ))
 }
 
+/// Maps a single Typst [SourceDiagnostic] into our FRB-bridged [TypstDiagnostic].
+///
+/// Used for both compile errors and compile warnings.
+fn map_diagnostic(e: &typst::diag::SourceDiagnostic, world: &SimpleWorld) -> TypstDiagnostic {
+    let severity = match e.severity {
+        typst::diag::Severity::Error => TypstSeverity::Error,
+        typst::diag::Severity::Warning => TypstSeverity::Warning,
+    };
+    let (span_start, span_end) = resolve_span(e.span, world)
+        .map(|(s, e)| (Some(s), Some(e)))
+        .unwrap_or((None, None));
+    TypstDiagnostic {
+        severity,
+        message: e.message.to_string(),
+        hints: e.hints.iter().map(|h| h.v.to_string()).collect(),
+        span_start,
+        span_end,
+    }
+}
+
 fn map_errors(errs: &[typst::diag::SourceDiagnostic], world: &SimpleWorld) -> TypstCompileError {
-    let diagnostics = errs
-        .iter()
-        .map(|e| {
-            let severity = match e.severity {
-                typst::diag::Severity::Error => TypstSeverity::Error,
-                typst::diag::Severity::Warning => TypstSeverity::Warning,
-            };
-            let (span_start, span_end) = resolve_span(e.span, world)
-                .map(|(s, e)| (Some(s), Some(e)))
-                .unwrap_or((None, None));
-            TypstDiagnostic {
-                severity,
-                message: e.message.to_string(),
-                hints: e.hints.iter().map(|h| h.v.to_string()).collect(),
-                span_start,
-                span_end,
-            }
-        })
-        .collect();
-    TypstCompileError { diagnostics }
+    TypstCompileError {
+        diagnostics: errs.iter().map(|e| map_diagnostic(e, world)).collect(),
+    }
 }
 
 #[frb(sync)]
