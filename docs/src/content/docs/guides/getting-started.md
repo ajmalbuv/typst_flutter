@@ -24,7 +24,6 @@ When you run `flutter build` or `flutter run`, the native Android Gradle and iOS
 By default, the compiler is lightweight but comes bundled with the following core fonts to ensure your basic documents and math formulas render perfectly out of the box:
 
 - **Libertinus Serif** (Regular) - The default serif font for Typst.
-- **LinLibertine** (Regular) - Another popular serif font.
 - **DejaVu Sans Mono** - The default monospaced font for code blocks.
 - **NewCM Math** (Book) - The default font for rendering complex mathematical formulas.
 

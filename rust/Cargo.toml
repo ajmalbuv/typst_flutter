@@ -1,6 +1,6 @@
 [package]
 name = "typst_flutter"
-version = "1.0.0"
+version = "2.2.0"
 edition = "2024"
 description = "Native Typst typesetting compiler for Flutter via Rust FFI"
 license = "Apache-2.0"
@@ -22,7 +22,7 @@ time = "0.3.47"
 
 [profile.release]
 opt-level = "z"      # optimise for binary size
-lto = false          # link-time optimisation (cross-crate inlining)
+lto = "thin"         # cross-crate link-time optimisation (smaller binaries)
 codegen-units = 256  # faster compilation
 strip = true         # strip debug symbols from the output
 panic = "abort"      # smaller binary: no unwinding tables

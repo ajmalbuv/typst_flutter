@@ -1,3 +1,15 @@
+## 2.2.0
+
+### Engine Upgrade
+
+- **Typst 0.15.0**: Upgraded the underlying Typst compiler engine to [0.15.0](https://typst.app/docs/changelog/0.15.0/). This brings variable font support, improved diagnostics, and many layout refinements. All Typst sub-crates (`typst-pdf`, `typst-render`, `typst-svg`, `typst-layout`, `typst-utils`) are updated in lockstep.
+
+### Optimizations
+
+- **Enabled Thin LTO**: Release builds now use `lto = "thin"` for cross-crate link-time optimization, yielding ~5-15% smaller native binaries without major compile-time impact.
+
+---
+
 ## 2.1.0
 
 ### Optimizations & API Refinements
@@ -9,7 +21,7 @@
 ### Documentation
 
 - **100% API Hover Docs**: Every public class, method, and field in the Dart API now has extensive documentation comments (`///`), providing a premium developer experience in IDEs.
-- **Bundled Fonts Documented**: The built-in core fonts (`Libertinus Serif`, `LinLibertine`, `DejaVu Sans Mono`, and `NewCM Math`) are now explicitly documented in the API so developers know what's available out-of-the-box.
+- **Bundled Fonts Documented**: The built-in core fonts (`Libertinus Serif`, `DejaVu Sans Mono`, and `NewCM Math`) are now explicitly documented in the API so developers know what's available out-of-the-box.
 
 ## 2.0.0
 

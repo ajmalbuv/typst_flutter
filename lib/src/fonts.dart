@@ -7,7 +7,6 @@ import 'package:meta/meta.dart';
 /// **Note:** The compiler already bundles the following core fonts by default
 /// for basic text, code, and math rendering:
 /// - `Libertinus Serif`
-/// - `LinLibertine`
 /// - `DejaVu Sans Mono`
 /// - `NewCM Math`
 ///
