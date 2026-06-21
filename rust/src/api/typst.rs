@@ -729,4 +729,17 @@ mod tests {
         world.set_files(files.clone());
         world.set_files(files); // This should hit the 'continue'
     }
+
+    #[test]
+    fn test_diag_span_range() {
+        use typst::syntax::{DiagSpan, FileId, RootedPath, VirtualPath, VirtualRoot};
+        let world = SimpleWorld::new();
+        let id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("main.typ").unwrap(),
+        ));
+        let diag_span = DiagSpan::from_range(id, 0..1);
+        let res = resolve_span(diag_span, &world);
+        assert!(res.is_some());
+    }
 }
