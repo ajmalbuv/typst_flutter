@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use flutter_rust_bridge::frb;
 use typst::diag::FileError;
-use typst::foundations::{Bytes, Datetime, Duration};
+use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue};
 use typst::syntax::{DiagSpan, DiagSpanKind, FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -187,12 +187,18 @@ impl TypstEngine {
         markup: String,
         files: Vec<VirtualFile>,
         sys_time: Option<i64>,
+        inputs: Option<HashMap<String, String>>,
     ) -> Result<CompiledDocument, TypstCompileError> {
         self.world.set_markup(markup);
         self.world.set_files(files);
         self.world.set_sys_time(sys_time);
+        self.world.set_inputs(inputs);
 
         let warned = typst::compile::<PagedDocument>(&self.world);
+
+        // Evict cache entries that haven't been used in the last 10 compilations
+        // to prevent unbounded memory growth during live editing.
+        comemo::evict(10);
 
         let warnings: Vec<TypstDiagnostic> = warned
             .warnings
@@ -263,7 +269,9 @@ impl SimpleWorld {
     }
 
     fn set_markup(&mut self, markup: String) {
-        self.source = Source::new(self.source.id(), markup);
+        if self.source.text() != markup {
+            self.source = Source::new(self.source.id(), markup);
+        }
     }
 
     /// Replaces the entire virtual file system for the next compilation.
@@ -272,15 +280,34 @@ impl SimpleWorld {
     /// compilation do not bleed into the next one. Callers pass the complete
     /// desired file set each time (an empty `virtual_files` means no files).
     fn set_files(&mut self, virtual_files: Vec<VirtualFile>) {
-        self.files.clear();
+        let mut new_keys = std::collections::HashSet::new();
         for vf in virtual_files {
             let normalised = vf.path.replace('\\', "/");
-            self.files.insert(normalised, Bytes::new(vf.bytes));
+            new_keys.insert(normalised.clone());
+
+            let new_bytes = Bytes::new(vf.bytes);
+            if let Some(existing) = self.files.get(&normalised) {
+                if existing.as_slice() == new_bytes.as_slice() {
+                    continue; // Skip if bytes are identical to preserve cache
+                }
+            }
+            self.files.insert(normalised, new_bytes);
         }
+        self.files.retain(|k, _| new_keys.contains(k));
     }
 
     fn set_sys_time(&mut self, sys_time: Option<i64>) {
         self.sys_time = sys_time;
+    }
+
+    fn set_inputs(&mut self, inputs: Option<HashMap<String, String>>) {
+        let mut dict = Dict::new();
+        if let Some(map) = inputs {
+            for (k, v) in map {
+                dict.insert(k.into(), v.into_value());
+            }
+        }
+        self.library = LazyHash::new(Library::builder().with_inputs(dict).build());
     }
 }
 
@@ -453,7 +480,9 @@ mod tests {
     #[test]
     fn test_basic_compilation() {
         let mut engine = TypstEngine::new();
-        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let doc = engine
+            .compile("= Hello".to_string(), vec![], None, None)
+            .unwrap();
         let pdf = doc.export_pdf().unwrap();
         assert!(!pdf.is_empty());
         assert_eq!(doc.page_count(), 1);
@@ -462,7 +491,7 @@ mod tests {
     #[test]
     fn test_compile_error() {
         let mut engine = TypstEngine::new();
-        let result = engine.compile("#invalid_call()".to_string(), vec![], None);
+        let result = engine.compile("#invalid_call()".to_string(), vec![], None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(!err.diagnostics.is_empty());
@@ -472,7 +501,9 @@ mod tests {
     #[test]
     fn test_svg_export() {
         let mut engine = TypstEngine::new();
-        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let doc = engine
+            .compile("= Hello".to_string(), vec![], None, None)
+            .unwrap();
         let svg = doc.export_svg(0).unwrap();
         assert!(svg.contains("<svg"));
     }
@@ -480,7 +511,9 @@ mod tests {
     #[test]
     fn test_page_info() {
         let mut engine = TypstEngine::new();
-        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let doc = engine
+            .compile("= Hello".to_string(), vec![], None, None)
+            .unwrap();
         let info = doc.page_info(0).unwrap();
         assert!(info.width_pt > 0.0);
         assert!(info.height_pt > 0.0);
@@ -492,7 +525,9 @@ mod tests {
     #[test]
     fn test_render_page() {
         let mut engine = TypstEngine::new();
-        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let doc = engine
+            .compile("= Hello".to_string(), vec![], None, None)
+            .unwrap();
         let render = doc.render_page(0, 2.0).unwrap();
         assert!(render.width > 0);
         assert!(render.height > 0);
@@ -505,7 +540,9 @@ mod tests {
     #[test]
     fn test_export_svg_out_of_bounds() {
         let mut engine = TypstEngine::new();
-        let doc = engine.compile("= Hello".to_string(), vec![], None).unwrap();
+        let doc = engine
+            .compile("= Hello".to_string(), vec![], None, None)
+            .unwrap();
         let err = doc.export_svg(1);
         assert!(err.is_err());
     }
@@ -598,13 +635,13 @@ mod tests {
         // 3. Cover warnings and potentially detached/range spans (lines 371-372, 401)
         // #set text(font: ...) usually triggers a warning if the font is missing.
         let markup = "#set text(font: \"__NonExistent__\")\n= Test\n#assert(1 == 1)".to_string();
-        let doc = engine.compile(markup, vec![], None).unwrap();
+        let doc = engine.compile(markup, vec![], None, None).unwrap();
 
         let _warnings = doc.warnings();
         // If Typst emits a warning for missing font, it will hit line 401.
 
         // Try to trigger a Range span by creating an error that spans multiple characters
-        let result = engine.compile("#let x = 1; #let x = 2".to_string(), vec![], None);
+        let result = engine.compile("#let x = 1; #let x = 2".to_string(), vec![], None, None);
         if let Err(err) = result {
             // This redefinition error usually has a Range span.
             for diag in err.diagnostics {

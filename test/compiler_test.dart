@@ -43,6 +43,7 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
     required String markup,
     required List<api.VirtualFile> files,
     PlatformInt64? sysTime,
+    Map<String, String>? inputs,
   }) async {
     if (markup == 'error') {
       throw const api.TypstCompileError(
@@ -95,6 +96,16 @@ void main() {
 
       expect(doc, isA<TypstDocument>());
       expect(doc.pageCount, equals(1));
+    });
+
+    test('Compilation with inputs works successfully', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(
+        source: 'Hello',
+        inputs: {'theme': 'dark'},
+      );
+
+      expect(doc, isA<TypstDocument>());
     });
 
     test('Compilation error throws TypstCompileException', () async {

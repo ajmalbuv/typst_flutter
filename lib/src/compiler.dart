@@ -91,6 +91,7 @@ class TypstCompiler implements Finalizable {
     required String source,
     FileSource? files,
     DateTime? date,
+    Map<String, String>? inputs,
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
     try {
@@ -98,6 +99,7 @@ class TypstCompiler implements Finalizable {
         markup: source,
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
+        inputs: inputs,
       );
       return TypstDocument.fromInner(inner);
     } on api.TypstCompileError catch (e) {

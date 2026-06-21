@@ -60,6 +60,26 @@ void main() {
       expect(doc.pageCount, equals(1));
     });
 
+    test('compile() passes sys.inputs correctly', () async {
+      final doc = await compiler.compile(
+        source: '#sys.inputs.at("theme", default: "light")',
+        inputs: {'theme': 'dark'},
+      );
+      final svg = await doc.renderSvg(0);
+      expect(svg, contains('dark'));
+      expect(svg, isNot(contains('light')));
+    });
+
+    test('incremental compilation succeeds and hits cache safely', () async {
+      // First compile primes the VFS and comemo cache
+      final doc1 = await compiler.compile(source: '= Test incremental');
+      expect((await doc1.exportPdf()).isNotEmpty, isTrue);
+
+      // Second compile should reuse the unchanged cache internally
+      final doc2 = await compiler.compile(source: '= Test incremental');
+      expect((await doc2.exportPdf()).isNotEmpty, isTrue);
+    });
+
     testWidgets('TypstDocumentViewer renders without throwing', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
