@@ -103,5 +103,25 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 5));
       expect(find.byType(TypstDocumentViewer), findsOneWidget);
     });
+
+    testWidgets('TypstCompilerProvider is used automatically by views', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TypstCompilerProvider(
+              compiler: compiler,
+              child: const TypstDocumentViewer(
+                source: '= Fast Provided Document',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(seconds: 5));
+      expect(find.byType(TypstDocumentViewer), findsOneWidget);
+      expect(find.byType(TypstView), findsWidgets);
+    });
   });
 }

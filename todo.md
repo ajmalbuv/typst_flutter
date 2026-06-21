@@ -10,7 +10,6 @@ This document tracks remaining features required for full feature parity with `t
 
 - [ ] **Layered Text Selection**: Overlay selectable HTML/Flutter text nodes on top of the SVG/Canvas render to allow copy-paste, highlighting, and hyperlinks (like `typst.ts` does in the browser).
 - [ ] **Dynamic Font Loading**: Support lazily fetching missing fonts as new scripts are encountered during compilation, rather than requiring all fonts upfront via `FontSource`.
-- [ ] **Global Compiler Provider**: Implement a `TypstCompilerProvider` `InheritedWidget` so `TypstView.source()` can optionally reuse a shared compiler instead of always creating a new one per widget.
 
 ──────
 

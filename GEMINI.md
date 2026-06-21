@@ -191,14 +191,14 @@ A `.typst_flutter_version` stamp file prevents redundant re-downloads.
 
 Triggered by `git push tag v*`. Runs 8 parallel jobs:
 
-| Job                  | Target                              | Output                   |
-| -------------------- | ----------------------------------- | ------------------------ |
-| `build-linux-x64`    | `x86_64-unknown-linux-gnu`          | `libtypst_flutter.so`    |
-| `build-linux-arm64`  | `aarch64-unknown-linux-gnu`         | `libtypst_flutter.so`    |
-| `build-macos`        | universal (x64 + arm64)             | `libtypst_flutter.a`     |
-| `build-windows-x64`  | `x86_64-pc-windows-msvc`            | `typst_flutter.dll`      |
-| `build-android` (×4) | arm64-v8a, armeabi-v7a, x86_64, x86 | `.so` per ABI            |
-| `build-ios`          | device + simulator xcframework      | `.xcframework`           |
+| Job                  | Target                              | Output                |
+| -------------------- | ----------------------------------- | --------------------- |
+| `build-linux-x64`    | `x86_64-unknown-linux-gnu`          | `libtypst_flutter.so` |
+| `build-linux-arm64`  | `aarch64-unknown-linux-gnu`         | `libtypst_flutter.so` |
+| `build-macos`        | universal (x64 + arm64)             | `libtypst_flutter.a`  |
+| `build-windows-x64`  | `x86_64-pc-windows-msvc`            | `typst_flutter.dll`   |
+| `build-android` (×4) | arm64-v8a, armeabi-v7a, x86_64, x86 | `.so` per ABI         |
+| `build-ios`          | device + simulator xcframework      | `.xcframework`        |
 
 After all jobs complete:
 
@@ -210,22 +210,12 @@ After all jobs complete:
 
 ## Current state (as of v2.0.0)
 
-### Done
-
-- [x] `flutter create --template=plugin_ffi` scaffold
-- [x] FRB v2 bridge with `TypstEngine` and `CompiledDocument` opaque handles
-- [x] `lib/src/compiler.dart` — `TypstCompiler` with `compile()` → `TypstDocument`
-- [x] `lib/src/document.dart` — `TypstDocument` opaque handle with `dispose()`, lazy rendering
-- [x] `lib/src/fonts.dart` — `FontSource` abstraction with `@internal` on `load()`
-- [x] `lib/src/files.dart` — `FileSource` for virtual files (images, includes)
-- [x] `lib/src/exceptions.dart` — typed `TypstCompileException` with structured diagnostics
-
 ### Future / nice to have
 
 - [ ] Incremental compilation cache (reuse world across calls with same fonts)
-- [ ] `TypstCompilerProvider` `InheritedWidget` for sharing a compiler in the widget tree
 - [ ] Font subsetting to reduce bundle size
 - [ ] Multi-file project support (directory-based VFS)
+- [ ] Typst Package Registry (`#import "@preview/..."`)
 
 ---
 
@@ -305,6 +295,13 @@ Future<TypstDocument> compile({
   required String source,
   FileSource? files,
   DateTime? date,
+  Map<String, String>? inputs,
+})
+
+// Query document structure/metadata using a Typst selector
+Future<String> query({
+  required TypstDocument document,
+  required String selector,
 })
 
 // Release native resources
@@ -381,6 +378,17 @@ TypstDocumentViewer(
   fonts: FontSource.assets(['assets/NotoSans.ttf']),
   renderMode: TypstRenderMode.svg,
 )
+```
+
+### `TypstCompilerProvider` widget
+
+```dart
+// Wrap your app/page to share a single background compiler globally
+TypstCompilerProvider(
+  compiler: mySharedCompiler,
+  child: MyApp(),
+)
+// Any TypstView or TypstDocumentViewer deep inside will automatically reuse it!
 ```
 
 ---
