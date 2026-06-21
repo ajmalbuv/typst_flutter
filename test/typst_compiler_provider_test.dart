@@ -96,4 +96,69 @@ void main() {
     // (since it's mocked),it used the provider.
     expect(find.byType(TypstView), findsOneWidget);
   });
+
+  testWidgets('TypstCompilerProvider.of returns compiler and asserts on null', (
+    tester,
+  ) async {
+    final compiler = await TypstCompiler.create();
+    TypstCompiler? foundCompiler;
+
+    await tester.pumpWidget(
+      TypstCompilerProvider(
+        compiler: compiler,
+        child: Builder(
+          builder: (context) {
+            foundCompiler = TypstCompilerProvider.of(context);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+
+    expect(foundCompiler, isNotNull);
+    expect(foundCompiler, equals(compiler));
+
+    // Now test assertion failure when no provider exists
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          TypstCompilerProvider.of(context);
+          return const SizedBox();
+        },
+      ),
+    );
+
+    final dynamic exception = tester.takeException();
+    expect(exception, isA<AssertionError>());
+    expect(
+      (exception as AssertionError).message,
+      equals('No TypstCompilerProvider found in context'),
+    );
+  });
+
+  test('updateShouldNotify correctly compares compilers', () async {
+    final compiler1 = await TypstCompiler.create();
+    final compiler2 = await TypstCompiler.create();
+
+    final provider1 = TypstCompilerProvider(
+      compiler: compiler1,
+      child: const SizedBox(),
+    );
+
+    final provider1Duplicate = TypstCompilerProvider(
+      compiler: compiler1,
+      child: const SizedBox(),
+    );
+
+    final provider2 = TypstCompilerProvider(
+      compiler: compiler2,
+      child: const SizedBox(),
+    );
+
+    // Same compiler -> false
+    expect(provider1.updateShouldNotify(provider1Duplicate), isFalse);
+
+    // Different compilers -> true
+    expect(provider1.updateShouldNotify(provider2), isTrue);
+  });
 }

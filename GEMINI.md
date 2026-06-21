@@ -76,7 +76,7 @@ typst_flutter/                  ← Flutter FFI plugin (pub.dev package root)
 │       ├── document.dart       ← TypstDocument: opaque handle to CompiledDocument in Rust
 │       ├── fonts.dart          ← FontSource abstraction (assets / bytes / none)
 │       ├── files.dart          ← FileSource abstraction (virtual files for images/includes)
-│       ├── exceptions.dart     ← TypstCompileException, TypstLibraryNotFoundException
+│       ├── exceptions.dart     ← TypstCompileException, TypstRenderException
 │       ├── widgets/
 │       │   ├── typst_view.dart             ← single-page renderer (raster or SVG via TypstRenderMode)
 │       │   └── typst_document_viewer.dart  ← multi-page scrollable viewer

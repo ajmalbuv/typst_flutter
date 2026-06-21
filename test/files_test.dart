@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
@@ -101,6 +103,11 @@ void main() {
       expect(identical(a, b), isTrue);
     });
 
+    test('can be constructed dynamically', () {
+      const source = FileSource.none();
+      expect(source, isNotNull);
+    });
+
     test('two none() instances are equal', () {
       // Non-const instantiations still compare equal via Equatable.
       const a = FileSource.none();
@@ -112,8 +119,11 @@ void main() {
   });
 
   group('FileSource.assets', () {
-    test('can be constructed', () {
-      const source = FileSource.assets({'/images/logo.png': 'assets/logo.png'});
+    test('can be constructed dynamically', () {
+      final map = Map<String, String>.of({
+        '/images/logo.png': 'assets/logo.png',
+      });
+      final source = FileSource.assets(map);
 
       expect(source, isNotNull);
     });
@@ -150,6 +160,32 @@ void main() {
       const source = FileSource.assets({});
 
       expect(source, isNotNull);
+    });
+
+    testWidgets('load() fetches bytes from rootBundle', (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('flutter/assets', (message) async {
+            final key = utf8.decode(message!.buffer.asUint8List());
+            if (key == 'assets/a.png') {
+              return ByteData.view(Uint8List.fromList([10, 20]).buffer);
+            } else if (key == 'assets/b.txt') {
+              return ByteData.view(Uint8List.fromList([30, 40]).buffer);
+            }
+            return null;
+          });
+
+      const source = FileSource.assets({
+        '/virtual/a.png': 'assets/a.png',
+        '/virtual/b.txt': 'assets/b.txt',
+      });
+      final loaded = await source.load();
+
+      expect(loaded.length, equals(2));
+      expect(loaded['/virtual/a.png'], equals([10, 20]));
+      expect(loaded['/virtual/b.txt'], equals([30, 40]));
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('flutter/assets', null);
     });
   });
 

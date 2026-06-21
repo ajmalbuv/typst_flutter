@@ -126,8 +126,8 @@ class TypstCompiler implements Finalizable {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   Future<List<api.VirtualFile>> _buildVirtualFiles(FileSource? source) async {
-    if (source == null) return const [];
-    final map = await source.load();
+    final effectiveSource = source ?? const FileSource.none();
+    final map = await effectiveSource.load();
     return map.entries
         .map((e) => api.VirtualFile(path: e.key, bytes: e.value))
         .toList();

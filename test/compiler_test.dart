@@ -56,6 +56,9 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
         ],
       );
     }
+    if (markup == 'generic_error') {
+      throw Exception('Generic error');
+    }
     return FakeCompiledDocument();
   }
 
@@ -136,6 +139,48 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('Generic error throws TypstCompileException', () async {
+      final compiler = await TypstCompiler.create();
+
+      expect(
+        () => compiler.compile(source: 'generic_error'),
+        throwsA(
+          isA<TypstCompileException>().having(
+            (e) => e.message,
+            'message',
+            contains('Exception: Generic error'),
+          ),
+        ),
+      );
+    });
+
+    test('Compilation with date works successfully', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello', date: DateTime(2023));
+
+      expect(doc, isA<TypstDocument>());
+    });
+
+    test('Can create compiler with custom fonts', () async {
+      final compiler = await TypstCompiler.create(
+        fonts: FontSource.bytes([
+          Uint8List.fromList([1, 2, 3]),
+        ]),
+      );
+      expect(compiler, isNotNull);
+    });
+
+    test('Can call addFonts explicitly', () async {
+      final compiler = await TypstCompiler.create();
+      await compiler.addFonts(
+        FontSource.bytes([
+          Uint8List.fromList([1, 2, 3]),
+        ]),
+      );
+      await compiler.addFonts(const FontSource.none());
+      expect(compiler, isNotNull);
     });
 
     test('renderRaster returns TypstRenderResult', () async {

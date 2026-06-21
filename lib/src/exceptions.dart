@@ -57,15 +57,3 @@ class TypstRenderException extends TypstException {
   @override
   String toString() => 'TypstRenderException: $message';
 }
-
-/// Thrown when the native typst_flutter library cannot be loaded.
-class TypstLibraryNotFoundException implements Exception {
-  /// Creates a [TypstLibraryNotFoundException] with the given [message].
-  const TypstLibraryNotFoundException(this.message);
-
-  /// The error message detailing why the library was not found.
-  final String message;
-
-  @override
-  String toString() => 'TypstLibraryNotFoundException: $message';
-}

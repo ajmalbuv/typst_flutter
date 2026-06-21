@@ -19,6 +19,15 @@ class FakeCompiledDocument extends Fake implements api.CompiledDocument {
   BigInt pageCount() => BigInt.from(1);
 
   @override
+  List<api.TypstDiagnostic> warnings() => const [
+    api.TypstDiagnostic(
+      severity: api.TypstSeverity.warning,
+      message: 'Test warning',
+      hints: [],
+    ),
+  ];
+
+  @override
   api.PageInfo pageInfo({required BigInt index}) =>
       const api.PageInfo(widthPt: 200, heightPt: 300);
 
@@ -112,6 +121,13 @@ void main() {
     test('pageCount returns the correct value for a single-page document', () {
       final doc = TypstDocument.fromInner(FakeCompiledDocument());
       expect(doc.pageCount, equals(1));
+    });
+
+    test('warnings returns inner warnings', () {
+      final doc = TypstDocument.fromInner(FakeCompiledDocument());
+      final warnings = doc.warnings;
+      expect(warnings.length, equals(1));
+      expect(warnings.first.message, equals('Test warning'));
     });
 
     test('pageCount returns the correct value for a multi-page document', () {
@@ -431,6 +447,55 @@ void main() {
       expect(result.width, equals(1));
       expect(result.height, equals(1));
       expect(result.bytes, same(bytes));
+    });
+
+    test('toImage() decodes raw bytes and caches result', () async {
+      final bytes = Uint8List.fromList([255, 0, 0, 255]); // 1x1 red pixel
+      final result = TypstRenderResult(
+        index: 0,
+        bytes: bytes,
+        width: 1,
+        height: 1,
+      );
+
+      final image1 = await result.toImage();
+      expect(image1.width, equals(1));
+      expect(image1.height, equals(1));
+
+      final image2 = await result.toImage();
+      expect(identical(image1, image2), isTrue); // Should be cached
+
+      result.dispose(); // Should dispose the cached image
+    });
+
+    test('toPng() encodes ad-hoc if not cached', () async {
+      final bytes = Uint8List.fromList([255, 0, 0, 255]);
+      final result = TypstRenderResult(
+        index: 0,
+        bytes: bytes,
+        width: 1,
+        height: 1,
+      );
+
+      final pngBytes = await result.toPng();
+      expect(pngBytes, isNotEmpty);
+      // It should self-dispose since it was ad-hoc
+    });
+
+    test('toPng() reuses cached image if available', () async {
+      final bytes = Uint8List.fromList([255, 0, 0, 255]);
+      final result = TypstRenderResult(
+        index: 0,
+        bytes: bytes,
+        width: 1,
+        height: 1,
+      );
+
+      await result.toImage(); // Cache the image
+      final pngBytes = await result.toPng();
+
+      expect(pngBytes, isNotEmpty);
+      result.dispose();
     });
   });
 }
