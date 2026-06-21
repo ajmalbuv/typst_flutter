@@ -123,13 +123,23 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
 
   TypstDocument? get _activeDocument => widget.document ?? _ownedDocument;
 
+  bool _didInit = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.document != null) {
       // Pre-compiled document: no compilation needed.
       _loading = false;
-    } else {
+      _didInit = true; // prevent didChangeDependencies from compiling
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
       unawaited(_compileDocument());
     }
   }

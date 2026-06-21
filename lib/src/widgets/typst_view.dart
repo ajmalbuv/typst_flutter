@@ -114,10 +114,20 @@ class _TypstViewState extends State<TypstView> {
   bool _loading = true;
   TypstException? _error;
 
+  bool _didInit = false;
+
   @override
   void initState() {
     super.initState();
-    unawaited(_prepareAndRender());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
+      unawaited(_prepareAndRender());
+    }
   }
 
   @override
