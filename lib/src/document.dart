@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:meta/meta.dart';
 import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 
@@ -31,8 +32,18 @@ class TypstDocument {
   final api.CompiledDocument _inner;
   bool _disposed = false;
 
+  /// The internal Rust handle. Do not use directly.
+  @internal
+  api.CompiledDocument get inner => _inner;
+
   /// The total number of pages in the compiled document.
   int get pageCount => _inner.pageCount().toInt();
+
+  /// Any compiler warnings emitted during compilation.
+  ///
+  /// These are non-fatal diagnostics (e.g. deprecated syntax, ambiguous layout)
+  /// that did not prevent compilation but may indicate issues.
+  List<api.TypstDiagnostic> get warnings => _inner.warnings();
 
   void _checkNotDisposed() {
     if (_disposed) {
@@ -163,10 +174,7 @@ class TypstRenderResult {
     final image = hadCached ? _cachedImage! : await _decodeImage();
     try {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw StateError('PNG encoding returned null.');
-      }
-      return byteData.buffer.asUint8List();
+      return byteData!.buffer.asUint8List();
     } finally {
       // Only dispose the image if we created it ad-hoc for this call.
       if (!hadCached) image.dispose();

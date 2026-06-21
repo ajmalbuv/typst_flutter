@@ -9,6 +9,7 @@ import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
 import 'package:typst_flutter/src/fonts.dart';
 import 'package:typst_flutter/src/rust/api/typst.dart' as api;
+import 'package:typst_flutter/src/widgets/typst_compiler_provider.dart';
 
 /// How the Typst document should be rendered.
 enum TypstRenderMode {
@@ -102,6 +103,7 @@ class TypstView extends StatefulWidget {
 class _TypstViewState extends State<TypstView> {
   // If managing our own compiler:
   TypstCompiler? _compiler;
+  bool _ownsCompiler = false;
   TypstDocument? _ownedDocument;
 
   // Render state:
@@ -112,10 +114,20 @@ class _TypstViewState extends State<TypstView> {
   bool _loading = true;
   TypstException? _error;
 
+  bool _didInit = false;
+
   @override
   void initState() {
     super.initState();
-    unawaited(_prepareAndRender());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
+      unawaited(_prepareAndRender());
+    }
   }
 
   @override
@@ -136,8 +148,11 @@ class _TypstViewState extends State<TypstView> {
           widget.files != old.files ||
           widget.date != old.date) {
         if (widget.fonts != old.fonts) {
-          _compiler?.dispose();
+          if (_ownsCompiler) {
+            _compiler?.dispose();
+          }
           _compiler = null;
+          _ownsCompiler = false;
         }
         needsRender = true;
       } else if (widget.pageIndex != old.pageIndex ||
@@ -156,7 +171,9 @@ class _TypstViewState extends State<TypstView> {
   void dispose() {
     _image?.dispose();
     _ownedDocument?.dispose();
-    _compiler?.dispose();
+    if (_ownsCompiler) {
+      _compiler?.dispose();
+    }
     super.dispose();
   }
 
@@ -171,9 +188,24 @@ class _TypstViewState extends State<TypstView> {
       if (widget.document != null) {
         doc = widget.document!;
       } else {
-        _compiler ??= await TypstCompiler.create(
-          fonts: widget.fonts ?? const FontSource.none(),
-        );
+        final providedCompiler = TypstCompilerProvider.maybeOf(context);
+        if (providedCompiler != null) {
+          if (_ownsCompiler) {
+            _compiler?.dispose();
+            _ownsCompiler = false;
+          }
+          _compiler = providedCompiler;
+          if (widget.fonts != null && widget.fonts != const FontSource.none()) {
+            await _compiler!.addFonts(widget.fonts!);
+          }
+        } else {
+          if (_compiler == null) {
+            _compiler = await TypstCompiler.create(
+              fonts: widget.fonts ?? const FontSource.none(),
+            );
+            _ownsCompiler = true;
+          }
+        }
         // Capture the previous document before the async gap so we can
         // dispose it after the new one is safely stored.
         final previousDoc = _ownedDocument;

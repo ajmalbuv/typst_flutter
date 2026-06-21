@@ -1,104 +1,10 @@
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 import 'package:typst_flutter/typst_flutter.dart';
-
-// ---------------------------------------------------------------------------
-// Fakes
-// ---------------------------------------------------------------------------
-
-/// Standard single-page fake that succeeds on all operations.
-class FakeCompiledDocument extends Fake implements api.CompiledDocument {
-  bool disposed = false;
-  int disposeCallCount = 0;
-
-  /// Records the last pixelPerPt passed to [renderPage].
-  double? lastPixelPerPt;
-
-  @override
-  BigInt pageCount() => BigInt.from(1);
-
-  @override
-  api.PageInfo pageInfo({required BigInt index}) =>
-      const api.PageInfo(widthPt: 200, heightPt: 300);
-
-  @override
-  Future<Uint8List> exportPdf() async => Uint8List.fromList([1, 2, 3, 4]);
-
-  @override
-  Future<String> exportSvg({required BigInt index}) async => '<svg>1</svg>';
-
-  @override
-  Future<api.RenderResult> renderPage({
-    required BigInt index,
-    required double pixelPerPt,
-  }) async {
-    lastPixelPerPt = pixelPerPt;
-    return api.RenderResult(
-      bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
-      width: 100,
-      height: 100,
-    );
-  }
-
-  @override
-  void dispose() {
-    disposed = true;
-    disposeCallCount++;
-  }
-}
-
-/// Fake whose export/render methods always throw, for error-wrapping tests.
-class FailingCompiledDocument extends Fake implements api.CompiledDocument {
-  @override
-  BigInt pageCount() => BigInt.from(1);
-
-  @override
-  api.PageInfo pageInfo({required BigInt index}) =>
-      const api.PageInfo(widthPt: 100, heightPt: 100);
-
-  @override
-  Future<Uint8List> exportPdf() async => throw Exception('PDF export failed');
-
-  @override
-  Future<String> exportSvg({required BigInt index}) async =>
-      throw Exception('SVG failed');
-
-  @override
-  Future<api.RenderResult> renderPage({
-    required BigInt index,
-    required double pixelPerPt,
-  }) async => throw Exception('Render failed');
-
-  @override
-  void dispose() {}
-}
-
-/// Multi-page fake (3 pages) with page-index-dependent dimensions.
-class MultiPageCompiledDocument extends Fake implements api.CompiledDocument {
-  @override
-  BigInt pageCount() => BigInt.from(3);
-
-  @override
-  api.PageInfo pageInfo({required BigInt index}) => api.PageInfo(
-    widthPt: 100.0 * (index.toInt() + 1),
-    heightPt: 200.0 * (index.toInt() + 1),
-  );
-
-  @override
-  void dispose() {}
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+import '../mocks/typst_mocks.dart';
 
 void main() {
-  // ── TypstDocument ──────────────────────────────────────────────────────
-
   group('TypstDocument', () {
-    // -- Construction ---------------------------------------------------
-
     test('fromInner constructor creates a valid document', () {
       final inner = FakeCompiledDocument();
       final doc = TypstDocument.fromInner(inner);
@@ -107,19 +13,22 @@ void main() {
       expect(doc, isA<TypstDocument>());
     });
 
-    // -- pageCount ------------------------------------------------------
-
     test('pageCount returns the correct value for a single-page document', () {
       final doc = TypstDocument.fromInner(FakeCompiledDocument());
       expect(doc.pageCount, equals(1));
     });
 
-    test('pageCount returns the correct value for a multi-page document', () {
-      final doc = TypstDocument.fromInner(MultiPageCompiledDocument());
-      expect(doc.pageCount, equals(3));
+    test('warnings returns inner warnings', () {
+      final doc = TypstDocument.fromInner(FakeCompiledDocument());
+      final warnings = doc.warnings;
+      expect(warnings.length, equals(1));
+      expect(warnings.first.message, equals('Test warning'));
     });
 
-    // -- dispose() ------------------------------------------------------
+    test('pageCount returns the correct value for a multi-page document', () {
+      final doc = TypstDocument.fromInner(FakeCompiledDocument(pages: 3));
+      expect(doc.pageCount, equals(3));
+    });
 
     test('dispose() calls inner.dispose()', () {
       final inner = FakeCompiledDocument();
@@ -151,7 +60,7 @@ void main() {
     });
 
     test('pageInfo returns index-dependent dimensions for multi-page doc', () {
-      final doc = TypstDocument.fromInner(MultiPageCompiledDocument());
+      final doc = TypstDocument.fromInner(FakeCompiledDocument(pages: 3));
 
       final info0 = doc.pageInfo(0);
       expect(info0.widthPt, equals(100));
@@ -202,8 +111,10 @@ void main() {
       expect(doc.exportPdf, throwsStateError);
     });
 
-    test('exportPdf wraps inner errors as TypstRenderException', () {
-      final doc = TypstDocument.fromInner(FailingCompiledDocument());
+    test('exportPdf wraps inner errors as TypstRenderException', () async {
+      final doc = TypstDocument.fromInner(
+        FakeCompiledDocument(renderThrows: true),
+      );
 
       expect(
         doc.exportPdf,
@@ -242,8 +153,10 @@ void main() {
       expect(() => doc.renderSvg(0), throwsStateError);
     });
 
-    test('renderSvg wraps inner errors as TypstRenderException', () {
-      final doc = TypstDocument.fromInner(FailingCompiledDocument());
+    test('renderSvg wraps inner errors as TypstRenderException', () async {
+      final doc = TypstDocument.fromInner(
+        FakeCompiledDocument(renderThrows: true),
+      );
 
       expect(
         () => doc.renderSvg(0),
@@ -291,8 +204,10 @@ void main() {
       expect(() => doc.renderRaster(pageIndex: 0), throwsStateError);
     });
 
-    test('renderRaster wraps inner errors as TypstRenderException', () {
-      final doc = TypstDocument.fromInner(FailingCompiledDocument());
+    test('renderRaster wraps inner errors as TypstRenderException', () async {
+      final doc = TypstDocument.fromInner(
+        FakeCompiledDocument(renderThrows: true),
+      );
 
       expect(
         () => doc.renderRaster(pageIndex: 0),
@@ -431,6 +346,55 @@ void main() {
       expect(result.width, equals(1));
       expect(result.height, equals(1));
       expect(result.bytes, same(bytes));
+    });
+
+    test('toImage() decodes raw bytes and caches result', () async {
+      final bytes = Uint8List.fromList([255, 0, 0, 255]); // 1x1 red pixel
+      final result = TypstRenderResult(
+        index: 0,
+        bytes: bytes,
+        width: 1,
+        height: 1,
+      );
+
+      final image1 = await result.toImage();
+      expect(image1.width, equals(1));
+      expect(image1.height, equals(1));
+
+      final image2 = await result.toImage();
+      expect(identical(image1, image2), isTrue); // Should be cached
+
+      result.dispose(); // Should dispose the cached image
+    });
+
+    test('toPng() encodes ad-hoc if not cached', () async {
+      final bytes = Uint8List.fromList([255, 0, 0, 255]);
+      final result = TypstRenderResult(
+        index: 0,
+        bytes: bytes,
+        width: 1,
+        height: 1,
+      );
+
+      final pngBytes = await result.toPng();
+      expect(pngBytes, isNotEmpty);
+      // It should self-dispose since it was ad-hoc
+    });
+
+    test('toPng() reuses cached image if available', () async {
+      final bytes = Uint8List.fromList([255, 0, 0, 255]);
+      final result = TypstRenderResult(
+        index: 0,
+        bytes: bytes,
+        width: 1,
+        height: 1,
+      );
+
+      await result.toImage(); // Cache the image
+      final pngBytes = await result.toPng();
+
+      expect(pngBytes, isNotEmpty);
+      result.dispose();
     });
   });
 }

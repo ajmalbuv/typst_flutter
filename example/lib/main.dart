@@ -66,7 +66,20 @@ Today's date injected from Flutter: #datetime.today().display()
   }
 
   Future<void> _initCompiler() async {
-    _compiler = await TypstCompiler.create();
+    final compiler = await TypstCompiler.create();
+    if (!mounted) {
+      compiler.dispose();
+      return;
+    }
+    setState(() {
+      _compiler = compiler;
+    });
+  }
+
+  @override
+  void dispose() {
+    _compiler?.dispose();
+    super.dispose();
   }
 
   void _compile() {
@@ -132,85 +145,97 @@ Today's date injected from Flutter: #datetime.today().display()
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Typst Flutter'),
-        backgroundColor: const Color(0xFF1E1E2E),
-        foregroundColor: const Color(0xFFCDD6F4),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (val) {
-              if (val == 'svg') unawaited(_showSvgOutput());
-              if (val == 'pdf') unawaited(_showPdfPreview());
-              if (val == 'save') unawaited(_savePdf());
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'svg',
-                child: ListTile(
-                  leading: Icon(Icons.zoom_in),
-                  title: Text('Interactive SVG'),
+    if (_compiler == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF1E1E2E),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF89B4FA)),
+        ),
+      );
+    }
+
+    return TypstCompilerProvider(
+      compiler: _compiler!,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Typst Flutter'),
+          backgroundColor: const Color(0xFF1E1E2E),
+          foregroundColor: const Color(0xFFCDD6F4),
+          actions: [
+            PopupMenuButton<String>(
+              onSelected: (val) {
+                if (val == 'svg') unawaited(_showSvgOutput());
+                if (val == 'pdf') unawaited(_showPdfPreview());
+                if (val == 'save') unawaited(_savePdf());
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'svg',
+                  child: ListTile(
+                    leading: Icon(Icons.zoom_in),
+                    title: Text('Interactive SVG'),
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'pdf',
-                child: ListTile(
-                  leading: Icon(Icons.picture_as_pdf),
-                  title: Text('Native PDF Preview'),
+                const PopupMenuItem(
+                  value: 'pdf',
+                  child: ListTile(
+                    leading: Icon(Icons.picture_as_pdf),
+                    title: Text('Native PDF Preview'),
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'save',
-                child: ListTile(
-                  leading: Icon(Icons.save_alt),
-                  title: Text('Save / Share PDF'),
+                const PopupMenuItem(
+                  value: 'save',
+                  child: ListTile(
+                    leading: Icon(Icons.save_alt),
+                    title: Text('Save / Share PDF'),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: TextField(
-                controller: _controller,
-                maxLines: null,
-                expands: true,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  color: Color(0xFFCDD6F4),
-                ),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  fillColor: Color(0xFF1E1E2E),
-                  filled: true,
-                  hintText: 'Enter Typst markup…',
+              ],
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: TextField(
+                  controller: _controller,
+                  maxLines: null,
+                  expands: true,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                    color: Color(0xFFCDD6F4),
+                  ),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    fillColor: Color(0xFF1E1E2E),
+                    filled: true,
+                    hintText: 'Enter Typst markup…',
+                  ),
                 ),
               ),
             ),
-          ),
-          const Divider(height: 1, color: Color(0xFF45475A)),
-          Expanded(
-            child: ColoredBox(
-              color: const Color(0xFF181825),
-              child: TypstDocumentViewer(
-                source: _currentSource,
-                loadingBuilder: (context) => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF89B4FA)),
+            const Divider(height: 1, color: Color(0xFF45475A)),
+            Expanded(
+              child: ColoredBox(
+                color: const Color(0xFF181825),
+                child: TypstDocumentViewer(
+                  source: _currentSource,
+                  loadingBuilder: (context) => const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF89B4FA)),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF89B4FA),
-        onPressed: _compile,
-        child: const Icon(Icons.play_arrow, color: Color(0xFF1E1E2E)),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: const Color(0xFF89B4FA),
+          onPressed: _compile,
+          child: const Icon(Icons.play_arrow, color: Color(0xFF1E1E2E)),
+        ),
       ),
     );
   }

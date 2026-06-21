@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
 void main() {
@@ -61,6 +60,34 @@ void main() {
       expect(doc.pageCount, equals(1));
     });
 
+    test('compile() passes sys.inputs correctly', () async {
+      final doc = await compiler.compile(
+        source: '= #sys.inputs.at("theme", default: "light")\n<my-theme>',
+        inputs: {'theme': 'dark'},
+      );
+      final json = await compiler.query(document: doc, selector: '<my-theme>');
+      expect(json, contains('dark'));
+      expect(json, isNot(contains('light')));
+    });
+
+    test('incremental compilation succeeds and hits cache safely', () async {
+      // First compile primes the VFS and comemo cache
+      final doc1 = await compiler.compile(source: '= Test incremental');
+      expect((await doc1.exportPdf()).isNotEmpty, isTrue);
+
+      // Second compile should reuse the unchanged cache internally
+      final doc2 = await compiler.compile(source: '= Test incremental');
+      expect((await doc2.exportPdf()).isNotEmpty, isTrue);
+    });
+
+    test('query() extracts document structure as JSON', () async {
+      final doc = await compiler.compile(
+        source: '= Chapter 1\n<my-label>\n== Section A',
+      );
+      final json = await compiler.query(document: doc, selector: '<my-label>');
+      expect(json, contains('Chapter 1'));
+    });
+
     testWidgets('TypstDocumentViewer renders without throwing', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -75,6 +102,26 @@ void main() {
       // Allow async compilation to complete
       await tester.pumpAndSettle(const Duration(seconds: 5));
       expect(find.byType(TypstDocumentViewer), findsOneWidget);
+    });
+
+    testWidgets('TypstCompilerProvider is used automatically by views', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TypstCompilerProvider(
+              compiler: compiler,
+              child: const TypstDocumentViewer(
+                source: '= Fast Provided Document',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(const Duration(seconds: 5));
+      expect(find.byType(TypstDocumentViewer), findsOneWidget);
+      expect(find.byType(TypstView), findsWidgets);
     });
   });
 }

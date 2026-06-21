@@ -44,7 +44,7 @@ class TypstCompiler implements Finalizable {
   ///
   /// [fonts] — additional font files to make available to the Typst compiler.
   /// These are added on top of the bundled core fonts (`Libertinus Serif`,
-  /// `LinLibertine`, `DejaVu Sans Mono`, and `NewCM Math`).
+  /// `DejaVu Sans Mono`, and `NewCM Math`).
   ///
   /// This is safe to call multiple times; the native library is only
   /// initialised once.
@@ -91,6 +91,7 @@ class TypstCompiler implements Finalizable {
     required String source,
     FileSource? files,
     DateTime? date,
+    Map<String, String>? inputs,
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
     try {
@@ -98,6 +99,7 @@ class TypstCompiler implements Finalizable {
         markup: source,
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
+        inputs: inputs,
       );
       return TypstDocument.fromInner(inner);
     } on api.TypstCompileError catch (e) {
@@ -113,11 +115,19 @@ class TypstCompiler implements Finalizable {
   /// Returns the version string of the embedded Typst compiler engine.
   String get compilerVersion => api.getTypstVersion();
 
+  /// Queries the compiled [document] using a Typst [selector] string.
+  ///
+  /// Returns a JSON string containing the queried elements (e.g. headings).
+  Future<String> query({
+    required TypstDocument document,
+    required String selector,
+  }) async => _engine.query(document: document.inner, selector: selector);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   Future<List<api.VirtualFile>> _buildVirtualFiles(FileSource? source) async {
-    if (source == null) return const [];
-    final map = await source.load();
+    final effectiveSource = source ?? const FileSource.none();
+    final map = await effectiveSource.load();
     return map.entries
         .map((e) => api.VirtualFile(path: e.key, bytes: e.value))
         .toList();

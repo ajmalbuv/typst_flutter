@@ -1,82 +1,8 @@
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart' as api;
-import 'package:typst_flutter/src/rust/api/typst.dart' show TypstSeverity;
 import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
-
-class FakeCompiledDocument extends Fake implements api.CompiledDocument {
-  bool disposed = false;
-
-  @override
-  BigInt pageCount() => BigInt.from(1);
-
-  @override
-  api.PageInfo pageInfo({required BigInt index}) =>
-      const api.PageInfo(widthPt: 200, heightPt: 300);
-
-  @override
-  Future<Uint8List> exportPdf() async => Uint8List.fromList([1, 2, 3, 4]);
-
-  @override
-  Future<String> exportSvg({required BigInt index}) async => '<svg>1</svg>';
-
-  @override
-  Future<api.RenderResult> renderPage({
-    required BigInt index,
-    required double pixelPerPt,
-  }) async => api.RenderResult(
-    bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
-    width: 100,
-    height: 100,
-  );
-
-  @override
-  void dispose() {
-    disposed = true;
-  }
-}
-
-/// A manual "Fake" implementation of the TypstEngine.
-class FakeTypstEngine extends Fake implements api.TypstEngine {
-  @override
-  Future<api.CompiledDocument> compile({
-    required String markup,
-    required List<api.VirtualFile> files,
-    PlatformInt64? sysTime,
-  }) async {
-    if (markup == 'error') {
-      throw const api.TypstCompileError(
-        diagnostics: [
-          api.TypstDiagnostic(
-            severity: TypstSeverity.error,
-            message: 'Simulated error',
-            hints: [],
-          ),
-        ],
-      );
-    }
-    return FakeCompiledDocument();
-  }
-
-  @override
-  Future<void> addFonts({required List<Uint8List> fontData}) async {}
-
-  @override
-  void dispose() {}
-}
-
-/// A manual "Fake" implementation of the Rust API.
-class FakeRustLibApi extends Fake implements RustLibApi {
-  @override
-  api.TypstEngine crateApiTypstTypstEngineNew() => FakeTypstEngine();
-
-  @override
-  String crateApiTypstGetTypstVersion() => '0.14.2-test';
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
+import '../mocks/typst_mocks.dart';
 
 void main() {
   setUpAll(() {
@@ -98,6 +24,25 @@ void main() {
       expect(doc.pageCount, equals(1));
     });
 
+    test('Compilation with inputs works successfully', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(
+        source: 'Hello',
+        inputs: {'theme': 'dark'},
+      );
+
+      expect(doc, isA<TypstDocument>());
+    });
+
+    test('query returns extracted JSON', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: '= Hello');
+      final result = await compiler.query(document: doc, selector: '<heading>');
+
+      expect(result, contains('heading'));
+      expect(result, contains('Hello'));
+    });
+
     test('Compilation error throws TypstCompileException', () async {
       final compiler = await TypstCompiler.create();
 
@@ -111,6 +56,48 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('Generic error throws TypstCompileException', () async {
+      final compiler = await TypstCompiler.create();
+
+      expect(
+        () => compiler.compile(source: 'generic_error'),
+        throwsA(
+          isA<TypstCompileException>().having(
+            (e) => e.message,
+            'message',
+            contains('Exception: Generic error'),
+          ),
+        ),
+      );
+    });
+
+    test('Compilation with date works successfully', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello', date: DateTime(2023));
+
+      expect(doc, isA<TypstDocument>());
+    });
+
+    test('Can create compiler with custom fonts', () async {
+      final compiler = await TypstCompiler.create(
+        fonts: FontSource.bytes([
+          Uint8List.fromList([1, 2, 3]),
+        ]),
+      );
+      expect(compiler, isNotNull);
+    });
+
+    test('Can call addFonts explicitly', () async {
+      final compiler = await TypstCompiler.create();
+      await compiler.addFonts(
+        FontSource.bytes([
+          Uint8List.fromList([1, 2, 3]),
+        ]),
+      );
+      await compiler.addFonts(const FontSource.none());
+      expect(compiler, isNotNull);
     });
 
     test('renderRaster returns TypstRenderResult', () async {

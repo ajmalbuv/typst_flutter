@@ -1,5 +1,6 @@
 # typst_flutter
 
+[![CI](https://github.com/ajmalbuv/typst_flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/ajmalbuv/typst_flutter/actions/workflows/ci.yml)
 [![Pub Version](https://img.shields.io/pub/v/typst_flutter)](https://pub.dev/packages/typst_flutter)
 [![Documentation](https://img.shields.io/badge/docs-pub.dev-blue)](https://pub.dev/documentation/typst_flutter/latest/)
 [![Pub Points](https://img.shields.io/pub/points/typst_flutter)](https://pub.dev/packages/typst_flutter)
@@ -21,9 +22,11 @@ Compile Typst markup to high-quality PDF documents or rendered images on Android
 
 - **Native Performance:** Typst runs directly on the device using a Rust core, compiling most documents in under 100ms.
 - **Opaque Handle Architecture:** Compiled documents live in Rust memory, ensuring high performance and zero race conditions.
+- **Shared Compiler Architecture:** Use `TypstCompilerProvider` to reuse a single engine globally across your widget tree for 0ms overhead rendering.
+- **Data Extraction:** Native `query()` API to extract JSON metadata and document structure using Typst selectors.
 - **Widgets Included:** Drop-in `TypstDocumentViewer` and `TypstView` widgets for instant live previews with Raster or SVG support.
 - **Structured Error Handling:** Get detailed `TypstDiagnostic` error lines when Typst compilation fails, perfect for building in-app editors.
-- **Virtual File System:** Pass Flutter assets and raw memory bytes directly into the Typst compiler via `FileSource` and `FontSource`.
+- **Virtual File System & Inputs:** Pass Flutter assets, raw memory bytes, and `sys.inputs` dictionaries directly into the Typst compiler.
 
 ## Getting started
 
@@ -54,8 +57,13 @@ final doc = await compiler.compile(
     = Hello Typst!
 
     This is rendered *natively* in Flutter.
+    #sys.inputs.at("theme", default: "light")
   ''',
+  inputs: {'theme': 'dark'}, // Safely pass variables to Typst
 );
+
+// Query metadata/structure from the compiled document
+final headingJson = await compiler.query(document: doc, selector: '<heading>');
 
 // Export to PDF bytes
 final pdfBytes = await doc.exportPdf();
@@ -89,6 +97,29 @@ class MyEditor extends StatelessWidget {
     );
   }
 }
+```
+
+### Shared Compiler Performance (Best Practice)
+
+To avoid spawning a new Rust thread for every widget, wrap your app or page in a `TypstCompilerProvider`. Any `TypstView` or `TypstDocumentViewer` underneath will automatically discover and reuse the shared compiler instantly!
+
+```dart
+// 1. Initialize once
+final compiler = await TypstCompiler.create();
+
+// 2. Wrap your app
+TypstCompilerProvider(
+  compiler: compiler,
+  child: Scaffold(
+    body: ListView(
+      children: [
+        // 3. These render instantly using the shared engine!
+        TypstView.source(source: '$ x^2 + y^2 = r^2 $'),
+        TypstView.source(source: '$ e^(i pi) + 1 = 0 $'),
+      ],
+    )
+  )
+)
 ```
 
 ## Advanced Fallback (Cargokit)

@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:typst_flutter/typst_flutter.dart';
 
@@ -155,7 +157,8 @@ void main() {
 
   group('FontSource.assets', () {
     test('can be constructed', () {
-      const source = FontSource.assets(['assets/font.ttf']);
+      final paths = ['assets/font.ttf'].toList();
+      final source = FontSource.assets(paths);
       expect(source, isNotNull);
     });
 
@@ -224,6 +227,33 @@ void main() {
       const bytesSource = FontSource.bytes([]);
 
       expect(assetsSource, isNot(equals(bytesSource)));
+    });
+
+    testWidgets('load() fetches bytes from rootBundle', (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('flutter/assets', (message) async {
+            final key = utf8.decode(message!.buffer.asUint8List());
+            if (key == 'assets/font1.ttf') {
+              return ByteData.view(Uint8List.fromList([1, 2, 3]).buffer);
+            } else if (key == 'assets/font2.ttf') {
+              return ByteData.view(Uint8List.fromList([4, 5, 6]).buffer);
+            }
+            return null;
+          });
+
+      const source = FontSource.assets([
+        'assets/font1.ttf',
+        'assets/font2.ttf',
+      ]);
+      final results = await source.load();
+
+      expect(results, hasLength(2));
+      expect(results[0], equals([1, 2, 3]));
+      expect(results[1], equals([4, 5, 6]));
+
+      // Clear the mock handler
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('flutter/assets', null);
     });
   });
 

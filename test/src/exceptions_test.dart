@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart'
-    show TypstDiagnostic, TypstSeverity, TypstSourceLocation;
 import 'package:typst_flutter/typst_flutter.dart';
 
 void main() {
@@ -427,77 +425,6 @@ void main() {
     });
   });
 
-  group('TypstLibraryNotFoundException', () {
-    test('stores message', () {
-      const e = TypstLibraryNotFoundException('lib not found');
-      expect(e.message, equals('lib not found'));
-    });
-
-    test('toString() includes class name and message', () {
-      const e = TypstLibraryNotFoundException('libtypst_flutter.so missing');
-      expect(
-        e.toString(),
-        equals('TypstLibraryNotFoundException: libtypst_flutter.so missing'),
-      );
-    });
-
-    test('implements Exception', () {
-      const e = TypstLibraryNotFoundException('test');
-      expect(e, isA<Exception>());
-    });
-
-    test('does NOT extend TypstException', () {
-      const e = TypstLibraryNotFoundException('test');
-      expect(e, isNot(isA<TypstException>()));
-    });
-
-    test('can be caught as Exception', () {
-      Object? caught;
-      try {
-        throw const TypstLibraryNotFoundException('gone');
-      } on Exception catch (e) {
-        caught = e;
-      }
-      expect(caught, isA<TypstLibraryNotFoundException>());
-    });
-
-    test('cannot be caught as TypstException', () {
-      Object? caughtAsTypst;
-      Object? caughtAsException;
-      try {
-        throw const TypstLibraryNotFoundException('gone');
-      } on TypstException catch (e) {
-        caughtAsTypst = e;
-      } on Exception catch (e) {
-        caughtAsException = e;
-      }
-      expect(caughtAsTypst, isNull);
-      expect(caughtAsException, isA<TypstLibraryNotFoundException>());
-    });
-
-    test('const constructor produces identical instances', () {
-      const a = TypstLibraryNotFoundException('same');
-      const b = TypstLibraryNotFoundException('same');
-      expect(identical(a, b), isTrue);
-    });
-
-    test('empty message', () {
-      const e = TypstLibraryNotFoundException('');
-      expect(e.message, isEmpty);
-      expect(e.toString(), equals('TypstLibraryNotFoundException: '));
-    });
-
-    test('message with path separators', () {
-      const e = TypstLibraryNotFoundException(
-        r'C:\Users\dev\libs\typst_flutter.dll not found',
-      );
-      expect(
-        e.message,
-        equals(r'C:\Users\dev\libs\typst_flutter.dll not found'),
-      );
-    });
-  });
-
   group('Exception hierarchy', () {
     test('TypstCompileException is caught by TypstException handler', () {
       Object? caught;
@@ -519,27 +446,11 @@ void main() {
       expect(caught, isA<TypstRenderException>());
     });
 
-    test(
-      'TypstLibraryNotFoundException is NOT caught by TypstException handler',
-      () {
-        Object? caught;
-        try {
-          throw const TypstLibraryNotFoundException('lib err');
-        } on TypstException {
-          caught = 'wrong handler';
-        } on Exception catch (e) {
-          caught = e;
-        }
-        expect(caught, isA<TypstLibraryNotFoundException>());
-      },
-    );
-
     test('all exception types are catchable as Exception', () {
       for (final exception in <Exception>[
         const TypstException('a'),
         const TypstCompileException('b'),
         const TypstRenderException('c'),
-        const TypstLibraryNotFoundException('d'),
       ]) {
         Object? caught;
         try {

@@ -6,6 +6,7 @@ import 'package:typst_flutter/src/document.dart';
 import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/files.dart';
 import 'package:typst_flutter/src/fonts.dart';
+import 'package:typst_flutter/src/widgets/typst_compiler_provider.dart';
 import 'package:typst_flutter/src/widgets/typst_view.dart';
 
 /// A scrollable, multi-page viewer for a Typst document.
@@ -115,11 +116,14 @@ class TypstDocumentViewer extends StatefulWidget {
 
 class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
   TypstCompiler? _compiler;
+  bool _ownsCompiler = false;
   bool _loading = true;
   TypstException? _error;
   TypstDocument? _ownedDocument;
 
   TypstDocument? get _activeDocument => widget.document ?? _ownedDocument;
+
+  bool _didInit = false;
 
   @override
   void initState() {
@@ -127,7 +131,15 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
     if (widget.document != null) {
       // Pre-compiled document: no compilation needed.
       _loading = false;
-    } else {
+      _didInit = true; // prevent didChangeDependencies from compiling
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
       unawaited(_compileDocument());
     }
   }
@@ -153,8 +165,11 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
         widget.files != old.files ||
         widget.date != old.date) {
       if (widget.fonts != old.fonts) {
-        _compiler?.dispose();
+        if (_ownsCompiler) {
+          _compiler?.dispose();
+        }
         _compiler = null;
+        _ownsCompiler = false;
       }
       unawaited(_compileDocument());
     }
@@ -163,7 +178,9 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
   @override
   void dispose() {
     _ownedDocument?.dispose();
-    _compiler?.dispose();
+    if (_ownsCompiler) {
+      _compiler?.dispose();
+    }
     super.dispose();
   }
 
@@ -174,9 +191,24 @@ class _TypstDocumentViewerState extends State<TypstDocumentViewer> {
     });
 
     try {
-      _compiler ??= await TypstCompiler.create(
-        fonts: widget.fonts ?? const FontSource.none(),
-      );
+      final providedCompiler = TypstCompilerProvider.maybeOf(context);
+      if (providedCompiler != null) {
+        if (_ownsCompiler) {
+          _compiler?.dispose();
+          _ownsCompiler = false;
+        }
+        _compiler = providedCompiler;
+        if (widget.fonts != null && widget.fonts != const FontSource.none()) {
+          await _compiler!.addFonts(widget.fonts!);
+        }
+      } else {
+        if (_compiler == null) {
+          _compiler = await TypstCompiler.create(
+            fonts: widget.fonts ?? const FontSource.none(),
+          );
+          _ownsCompiler = true;
+        }
+      }
 
       // Capture the previous document before the async gap so we can
       // dispose it after the new one is safely stored.
