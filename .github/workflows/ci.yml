@@ -117,13 +117,19 @@ jobs:
         with:
           channel: "stable"
           cache: true
+      - name: Install pana
+        run: dart pub global activate pana
       - name: Analyze Package
         id: analysis
-        uses: axel-op/dart-package-analyzer@v3
-        with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pana --json > pana_report.json
+          
+          # Multiline output for GitHub Actions
+          echo "json_output<<EOF" >> $GITHUB_OUTPUT
+          cat pana_report.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       - name: Enforce Pub Package Score
-        uses: fujidaiti/dart-package-inspector@v1.0.0
+        uses: fujidaiti/dart-package-inspector@v2
         with:
           report: ${{ steps.analysis.outputs.json_output }}
           min-pub-points: 160
