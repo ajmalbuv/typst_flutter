@@ -108,3 +108,22 @@ jobs:
         with:
           files: rust/lcov.info
           flags: rust
+
+  pub-score:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+      - name: Analyze Package
+        id: analysis
+        uses: axel-op/dart-package-analyzer@v3
+        with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enforce Pub Package Score
+        uses: fujidaiti/dart-package-inspector@v1.0.0
+        with:
+          report: ${{ steps.analysis.outputs.json_output }}
+          min-pub-points: 160

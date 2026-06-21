@@ -62,7 +62,7 @@ void main() {
 
     test('compile() passes sys.inputs correctly', () async {
       final doc = await compiler.compile(
-        source: '[#sys.inputs.at("theme", default: "light")] <my-theme>',
+        source: '= #sys.inputs.at("theme", default: "light")\n<my-theme>',
         inputs: {'theme': 'dark'},
       );
       final json = await compiler.query(document: doc, selector: '<my-theme>');
