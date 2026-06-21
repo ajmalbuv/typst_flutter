@@ -1,5 +1,6 @@
 # typst_flutter
 
+[![CI](https://github.com/ajmalbuv/typst_flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/ajmalbuv/typst_flutter/actions/workflows/ci.yml)
 [![Pub Version](https://img.shields.io/pub/v/typst_flutter)](https://pub.dev/packages/typst_flutter)
 [![Documentation](https://img.shields.io/badge/docs-pub.dev-blue)](https://pub.dev/documentation/typst_flutter/latest/)
 [![Pub Points](https://img.shields.io/pub/points/typst_flutter)](https://pub.dev/packages/typst_flutter)
