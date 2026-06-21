@@ -286,10 +286,12 @@ impl SimpleWorld {
             new_keys.insert(normalised.clone());
 
             let new_bytes = Bytes::new(vf.bytes);
-            if let Some(existing) = self.files.get(&normalised) {
-                if existing.as_slice() == new_bytes.as_slice() {
-                    continue; // Skip if bytes are identical to preserve cache
-                }
+            if self
+                .files
+                .get(&normalised)
+                .is_some_and(|existing| existing.as_slice() == new_bytes.as_slice())
+            {
+                continue; // Skip if bytes are identical to preserve cache
             }
             self.files.insert(normalised, new_bytes);
         }
