@@ -684,32 +684,49 @@ mod tests {
         use typst::World;
         let mut engine = TypstEngine::new();
 
-        // 1. Cover add_fonts loop (lines 259-261)
-        // Re-add one of the bundled fonts to ensure we hit the loop with "valid" data
         let font_data = include_bytes!("../../assets/fonts/DejaVuSansMono.ttf").to_vec();
         engine.add_fonts(vec![font_data]);
 
-        // 2. Cover today() fallback (lines 339-342)
         let world = SimpleWorld::new();
         let today = world.today(None);
         assert!(today.is_some());
 
-        // 3. Cover warnings and potentially detached/range spans (lines 371-372, 401)
-        // #set text(font: ...) usually triggers a warning if the font is missing.
+        // Test Detached span via syntax error or manual
         let markup = "#set text(font: \"__NonExistent__\")\n= Test\n#assert(1 == 1)".to_string();
         let doc = engine.compile(markup, vec![], None, None).unwrap();
-
         let _warnings = doc.warnings();
-        // If Typst emits a warning for missing font, it will hit line 401.
 
-        // Try to trigger a Range span by creating an error that spans multiple characters
-        let result = engine.compile("#let x = 1; #let x = 2".to_string(), vec![], None, None);
-        if let Err(err) = result {
-            // This redefinition error usually has a Range span.
-            for diag in err.diagnostics {
-                let _ = diag.span_start;
-                let _ = diag.span_end;
-            }
-        }
+        // 1. Cover query evaluate selector error (lines 245-251)
+        let query_err = engine.query(&doc, "<invalid> syntax".to_string());
+        assert!(query_err.is_err());
+
+        // 2. Cover DiagSpanKind::Range or Detached
+        // We can just construct a SourceDiagnostic and map it directly
+        use typst::diag::SourceDiagnostic;
+        use typst::syntax::Span;
+        let diag = SourceDiagnostic::error(Span::detached(), "Detached error");
+        let mapped = map_diagnostic(&diag, &world);
+        assert!(mapped.span_start.is_none());
+
+        // 3. Cover set_inputs loop
+        let mut inputs = HashMap::new();
+        inputs.insert("test_key".to_string(), "test_val".to_string());
+        let _ = engine.compile(
+            "#sys.inputs.test_key".to_string(),
+            vec![],
+            None,
+            Some(inputs),
+        );
+    }
+
+    #[test]
+    fn test_vfs_identical_cache_continue() {
+        let mut world = SimpleWorld::new();
+        let files = vec![VirtualFile {
+            path: "test.png".to_string(),
+            bytes: b"fake_png_data".to_vec(),
+        }];
+        world.set_files(files.clone());
+        world.set_files(files); // This should hit the 'continue'
     }
 }

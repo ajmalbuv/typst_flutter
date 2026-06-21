@@ -3,96 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
-
-class _FailingFontSource extends FontSource {
-  @override
-  Future<List<Uint8List>> load() async => throw Exception('Generic font error');
-  @override
-  List<Object?> get props => [];
-}
-
-class FakeCompiledDocument extends Fake implements api.CompiledDocument {
-  bool disposed = false;
-
-  @override
-  BigInt pageCount() => BigInt.from(3); // Simulate 3 pages
-
-  @override
-  api.PageInfo pageInfo({required BigInt index}) =>
-      const api.PageInfo(widthPt: 200, heightPt: 300);
-
-  @override
-  Future<Uint8List> exportPdf() async => Uint8List.fromList([1, 2, 3, 4]);
-
-  @override
-  Future<String> exportSvg({required BigInt index}) async =>
-      '<svg height="100" width="100"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="blue" /></svg>';
-
-  @override
-  Future<api.RenderResult> renderPage({
-    required BigInt index,
-    required double pixelPerPt,
-  }) async => api.RenderResult(
-    bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
-    width: 100,
-    height: 100,
-  );
-
-  @override
-  void dispose() {
-    disposed = true;
-  }
-}
-
-class FakeTypstEngine extends Fake implements api.TypstEngine {
-  @override
-  Future<api.CompiledDocument> compile({
-    required String markup,
-    required List<api.VirtualFile> files,
-    PlatformInt64? sysTime,
-    Map<String, String>? inputs,
-  }) async {
-    if (markup == 'error') {
-      throw const api.TypstCompileError(
-        diagnostics: [
-          api.TypstDiagnostic(
-            severity: TypstSeverity.error,
-            message: 'Simulated error',
-            hints: [],
-          ),
-        ],
-      );
-    }
-    if (markup == 'generic_error') {
-      throw Exception('Generic error');
-    }
-    if (markup == 'delayed') {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      return FakeCompiledDocument();
-    }
-    return FakeCompiledDocument();
-  }
-
-  @override
-  Future<void> addFonts({required List<Uint8List> fontData}) async {}
-
-  @override
-  void dispose() {}
-}
-
-class FakeRustLibApi extends Fake implements RustLibApi {
-  @override
-  api.TypstEngine crateApiTypstTypstEngineNew() => FakeTypstEngine();
-
-  @override
-  String crateApiTypstGetTypstVersion() => '0.14.2-test';
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
+import '../../mocks/typst_mocks.dart';
 
 void main() {
   setUpAll(() {
@@ -285,7 +198,7 @@ void main() {
       tester,
     ) async {
       // Create a font source that throws a generic exception
-      final failingFonts = _FailingFontSource();
+      final failingFonts = FailingFontSource();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -424,10 +337,10 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(800, 2000));
 
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: TypstDocumentViewer(
-              source: '= Separator test',
+            body: TypstDocumentViewer.document(
+              document: TypstDocument.fromInner(FakeCompiledDocument(pages: 3)),
               pageSpacing: 20,
             ),
           ),

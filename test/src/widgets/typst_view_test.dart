@@ -2,93 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 import 'package:typst_flutter/src/rust/frb_generated.dart';
 import 'package:typst_flutter/typst_flutter.dart';
-
-class _FailingFontSource extends FontSource {
-  @override
-  Future<List<Uint8List>> load() async => throw Exception('Generic font error');
-  @override
-  List<Object?> get props => [];
-}
-
-class FakeCompiledDocument extends Fake implements api.CompiledDocument {
-  bool disposed = false;
-
-  @override
-  BigInt pageCount() => BigInt.from(1);
-
-  @override
-  api.PageInfo pageInfo({required BigInt index}) =>
-      const api.PageInfo(widthPt: 200, heightPt: 300);
-
-  @override
-  Future<Uint8List> exportPdf() async => Uint8List.fromList([1, 2, 3, 4]);
-
-  @override
-  Future<String> exportSvg({required BigInt index}) async =>
-      '<svg height="100" width="100"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red" /></svg>';
-
-  @override
-  Future<api.RenderResult> renderPage({
-    required BigInt index,
-    required double pixelPerPt,
-  }) async => api.RenderResult(
-    bytes: Uint8List.fromList(List.filled(100 * 100 * 4, 255)),
-    width: 100,
-    height: 100,
-  );
-
-  @override
-  void dispose() {
-    disposed = true;
-  }
-}
-
-class FakeTypstEngine extends Fake implements api.TypstEngine {
-  @override
-  Future<api.CompiledDocument> compile({
-    required String markup,
-    required List<api.VirtualFile> files,
-    PlatformInt64? sysTime,
-    Map<String, String>? inputs,
-  }) async {
-    if (markup == 'error') {
-      throw const api.TypstCompileError(
-        diagnostics: [
-          api.TypstDiagnostic(
-            severity: TypstSeverity.error,
-            message: 'Simulated error',
-            hints: [],
-          ),
-        ],
-      );
-    }
-    if (markup == 'delayed') {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      return FakeCompiledDocument();
-    }
-    return FakeCompiledDocument();
-  }
-
-  @override
-  Future<void> addFonts({required List<Uint8List> fontData}) async {}
-
-  @override
-  void dispose() {}
-}
-
-class FakeRustLibApi extends Fake implements RustLibApi {
-  @override
-  api.TypstEngine crateApiTypstTypstEngineNew() => FakeTypstEngine();
-
-  @override
-  String crateApiTypstGetTypstVersion() => '0.14.2-test';
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => null;
-}
+import '../../mocks/typst_mocks.dart';
 
 void main() {
   setUpAll(() {
@@ -311,7 +227,7 @@ void main() {
     testWidgets('handles generic error gracefully via failing font source', (
       tester,
     ) async {
-      final failingFonts = _FailingFontSource();
+      final failingFonts = FailingFontSource();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -401,6 +317,134 @@ void main() {
 
       await tester.pumpAndSettle();
       expect(find.textContaining('Page index out of bounds'), findsOneWidget);
+    });
+  });
+
+  group('TypstView - Coverage Tests', () {
+    testWidgets('bails out safely if unmounted during renderRaster', (
+      tester,
+    ) async {
+      var show = true;
+      StateSetter? setLocalState;
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            setLocalState = setState;
+            return MaterialApp(
+              home: Scaffold(
+                body: show
+                    ? const TypstView.source(
+                        source: 'dummy',
+                        renderMode: TypstRenderMode.raster,
+                        pixelsPerPt: 99,
+                      )
+                    : const SizedBox(),
+              ),
+            );
+          },
+        ),
+      );
+
+      await tester.runAsync(() async {
+        await tester.pump();
+        show = false;
+        setLocalState?.call(() {});
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+      });
+    });
+
+    testWidgets('adds fonts to provider if available', (tester) async {
+      final compiler = await TypstCompiler.create();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TypstCompilerProvider(
+              compiler: compiler,
+              child: const TypstView.source(
+                source: 'fonts',
+                fonts: FontSource.bytes([]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      compiler.dispose();
+    });
+
+    testWidgets(
+      'didUpdateWidget re-renders when document pixelsPerPt changes',
+      (tester) async {
+        var pixelsPerPt = 2.0;
+        StateSetter? setLocalState;
+        final doc = TypstDocument.fromInner(FakeCompiledDocument());
+
+        await tester.pumpWidget(
+          StatefulBuilder(
+            builder: (context, setState) {
+              setLocalState = setState;
+              return MaterialApp(
+                home: Scaffold(
+                  body: TypstView(
+                    document: doc,
+                    renderMode: TypstRenderMode.raster,
+                    pixelsPerPt: pixelsPerPt,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+
+        await tester.runAsync(() async {
+          await tester.pump();
+        });
+
+        pixelsPerPt = 3.0;
+        setLocalState?.call(() {});
+        await tester.runAsync(() async {
+          await tester.pump();
+        });
+
+        doc.dispose();
+      },
+    );
+
+    testWidgets('didUpdateWidget re-renders when source pixelsPerPt changes', (
+      tester,
+    ) async {
+      var pixelsPerPt = 2.0;
+      StateSetter? setLocalState;
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            setLocalState = setState;
+            return MaterialApp(
+              home: Scaffold(
+                body: TypstView.source(
+                  source: 'hello',
+                  renderMode: TypstRenderMode.raster,
+                  pixelsPerPt: pixelsPerPt,
+                ),
+              ),
+            );
+          },
+        ),
+      );
+
+      await tester.runAsync(() async {
+        await tester.pump();
+      });
+
+      pixelsPerPt = 3.0;
+      setLocalState?.call(() {});
+      await tester.runAsync(() async {
+        await tester.pump();
+      });
     });
   });
 }

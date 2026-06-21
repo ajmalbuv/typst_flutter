@@ -174,10 +174,7 @@ class TypstRenderResult {
     final image = hadCached ? _cachedImage! : await _decodeImage();
     try {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw StateError('PNG encoding returned null.');
-      }
-      return byteData.buffer.asUint8List();
+      return byteData!.buffer.asUint8List();
     } finally {
       // Only dispose the image if we created it ad-hoc for this call.
       if (!hadCached) image.dispose();
