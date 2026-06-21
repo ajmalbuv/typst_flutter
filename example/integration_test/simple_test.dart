@@ -62,12 +62,12 @@ void main() {
 
     test('compile() passes sys.inputs correctly', () async {
       final doc = await compiler.compile(
-        source: '#sys.inputs.at("theme", default: "light")',
+        source: '[#sys.inputs.at("theme", default: "light")] <my-theme>',
         inputs: {'theme': 'dark'},
       );
-      final svg = await doc.renderSvg(0);
-      expect(svg, contains('dark'));
-      expect(svg, isNot(contains('light')));
+      final json = await compiler.query(document: doc, selector: '<my-theme>');
+      expect(json, contains('dark'));
+      expect(json, isNot(contains('light')));
     });
 
     test('incremental compilation succeeds and hits cache safely', () async {
@@ -78,6 +78,14 @@ void main() {
       // Second compile should reuse the unchanged cache internally
       final doc2 = await compiler.compile(source: '= Test incremental');
       expect((await doc2.exportPdf()).isNotEmpty, isTrue);
+    });
+
+    test('query() extracts document structure as JSON', () async {
+      final doc = await compiler.compile(
+        source: '= Chapter 1\n<my-label>\n== Section A',
+      );
+      final json = await compiler.query(document: doc, selector: '<my-label>');
+      expect(json, contains('Chapter 1'));
     });
 
     testWidgets('TypstDocumentViewer renders without throwing', (tester) async {

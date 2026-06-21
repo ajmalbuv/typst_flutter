@@ -215,6 +215,56 @@ impl TypstEngine {
             warnings,
         })
     }
+
+    pub fn query(
+        &mut self,
+        document: &CompiledDocument,
+        selector: String,
+    ) -> Result<String, String> {
+        use comemo::Track;
+        use typst::World;
+        use typst::engine::Sink;
+        use typst::foundations::{Context, IntoValue, LocatableSelector, Scope};
+        use typst::introspection::{EmptyIntrospector, Introspector};
+        use typst::routines::SpanMode;
+        use typst::syntax::{Span, SyntaxMode};
+        use typst_eval::eval_string;
+
+        let sel_value = eval_string(
+            (&self.world as &dyn World).track(),
+            self.world.library(),
+            Sink::new().track_mut(),
+            EmptyIntrospector.track(),
+            Context::none().track(),
+            &selector,
+            SpanMode::Uniform(Span::detached()),
+            SyntaxMode::Code,
+            Scope::default(),
+        )
+        .map_err(|errors| {
+            let mut message = String::from("failed to evaluate selector");
+            for (i, error) in errors.into_iter().enumerate() {
+                message.push_str(if i == 0 { ": " } else { ", " });
+                message.push_str(&error.message);
+            }
+            message
+        })?;
+
+        let locatable = sel_value
+            .cast::<LocatableSelector>()
+            .map_err(|e| format!("Invalid selector: {:?}", e))?;
+
+        let elements = document
+            .inner
+            .introspector()
+            .query(&locatable.0)
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let array: typst::foundations::Array =
+            elements.into_iter().map(IntoValue::into_value).collect();
+        serde_json::to_string(&array).map_err(|e| format!("JSON error: {}", e))
+    }
 }
 
 // ── SimpleWorld — in-memory Typst World implementation ───────────────────────
@@ -537,6 +587,16 @@ mod tests {
 
         let err = doc.render_page(1, 2.0);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_query() {
+        let mut engine = TypstEngine::new();
+        let doc = engine
+            .compile("= Heading 1\n<my-label>".to_string(), vec![], None, None)
+            .unwrap();
+        let json = engine.query(&doc, "<my-label>".to_string()).unwrap();
+        assert!(json.contains("Heading 1"));
     }
 
     #[test]

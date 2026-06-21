@@ -115,6 +115,14 @@ class TypstCompiler implements Finalizable {
   /// Returns the version string of the embedded Typst compiler engine.
   String get compilerVersion => api.getTypstVersion();
 
+  /// Queries the compiled [document] using a Typst [selector] string.
+  ///
+  /// Returns a JSON string containing the queried elements (e.g. headings).
+  Future<String> query({
+    required TypstDocument document,
+    required String selector,
+  }) async => _engine.query(document: document.inner, selector: selector);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   Future<List<api.VirtualFile>> _buildVirtualFiles(FileSource? source) async {

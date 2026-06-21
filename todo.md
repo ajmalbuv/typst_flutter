@@ -2,10 +2,6 @@
 
 This document tracks remaining features required for full feature parity with `typst.ts` and advanced Flutter integration.
 
-## 🟡 P1: Core Feature Parity
-
-- [ ] **`query()` API**: Allow extracting structured data (headings, `#metadata()`, TOC) from a compiled document. (e.g. `await compiler.query('<heading>')`).
-
 ## 🟢 P2: Advanced Features
 
 - [ ] **Typst Package Registry**: Add support for `#import "@preview/..."` by implementing a `PackageSource` in Dart and resolving `FileId::package()` in `SimpleWorld`.
@@ -22,5 +18,4 @@ This document tracks remaining features required for full feature parity with `t
 
 ## vs. typst.ts — What's Missing
 
-typst.ts isn't just a compiler bridge — it's an ecosystem. The functional gaps (scoped to no new features, just
-table stakes parity) are: query() API for structured data extraction. Everything else in the todo.md is genuinely future features.
+typst.ts isn't just a compiler bridge — it's an ecosystem. Everything else in the todo.md is genuinely future features.

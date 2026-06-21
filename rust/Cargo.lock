@@ -2896,8 +2896,10 @@ version = "2.2.0"
 dependencies = [
  "comemo",
  "flutter_rust_bridge",
+ "serde_json",
  "time",
  "typst",
+ "typst-eval",
  "typst-layout",
  "typst-pdf",
  "typst-render",

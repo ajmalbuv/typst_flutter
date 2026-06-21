@@ -56,6 +56,11 @@ abstract class TypstEngine implements RustOpaqueInterface {
 
   /// Creates a new Typst engine with bundled default fonts.
   factory TypstEngine() => RustLib.instance.api.crateApiTypstTypstEngineNew();
+
+  Future<String> query({
+    required CompiledDocument document,
+    required String selector,
+  });
 }
 
 class PageInfo {

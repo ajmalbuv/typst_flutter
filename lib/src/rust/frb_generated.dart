@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1798882019;
+  int get rustContentHash => -724385650;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -120,6 +120,12 @@ abstract class RustLibApi extends BaseApi {
   });
 
   TypstEngine crateApiTypstTypstEngineNew();
+
+  Future<String> crateApiTypstTypstEngineQuery({
+    required TypstEngine that,
+    required CompiledDocument document,
+    required String selector,
+  });
 
   String crateApiTypstGetTypstVersion();
 
@@ -465,12 +471,55 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "TypstEngine_new", argNames: []);
 
   @override
+  Future<String> crateApiTypstTypstEngineQuery({
+    required TypstEngine that,
+    required CompiledDocument document,
+    required String selector,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTypstEngine(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCompiledDocument(
+            document,
+            serializer,
+          );
+          sse_encode_String(selector, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiTypstTypstEngineQueryConstMeta,
+        argValues: [that, document, selector],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTypstTypstEngineQueryConstMeta =>
+      const TaskConstMeta(
+        debugName: "TypstEngine_query",
+        argNames: ["that", "document", "selector"],
+      );
+
+  @override
   String crateApiTypstGetTypstVersion() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1571,5 +1620,14 @@ class TypstEngineImpl extends RustOpaque implements TypstEngine {
     files: files,
     sysTime: sysTime,
     inputs: inputs,
+  );
+
+  Future<String> query({
+    required CompiledDocument document,
+    required String selector,
+  }) => RustLib.instance.api.crateApiTypstTypstEngineQuery(
+    that: this,
+    document: document,
+    selector: selector,
   );
 }

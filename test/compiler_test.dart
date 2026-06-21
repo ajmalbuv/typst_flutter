@@ -63,6 +63,12 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
   Future<void> addFonts({required List<Uint8List> fontData}) async {}
 
   @override
+  Future<String> query({
+    required api.CompiledDocument document,
+    required String selector,
+  }) async => '[{"type":"heading","level":1,"body":"Hello"}]';
+
+  @override
   void dispose() {}
 }
 
@@ -106,6 +112,15 @@ void main() {
       );
 
       expect(doc, isA<TypstDocument>());
+    });
+
+    test('query returns extracted JSON', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: '= Hello');
+      final result = await compiler.query(document: doc, selector: '<heading>');
+
+      expect(result, contains('heading'));
+      expect(result, contains('Hello'));
     });
 
     test('Compilation error throws TypstCompileException', () async {

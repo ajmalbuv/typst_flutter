@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:meta/meta.dart';
 import 'package:typst_flutter/src/exceptions.dart';
 import 'package:typst_flutter/src/rust/api/typst.dart' as api;
 
@@ -30,6 +31,10 @@ class TypstDocument {
 
   final api.CompiledDocument _inner;
   bool _disposed = false;
+
+  /// The internal Rust handle. Do not use directly.
+  @internal
+  api.CompiledDocument get inner => _inner;
 
   /// The total number of pages in the compiled document.
   int get pageCount => _inner.pageCount().toInt();
