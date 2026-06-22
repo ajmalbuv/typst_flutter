@@ -61,7 +61,7 @@ jobs:
           Compress-Archive -Path "$buildDir/*" -DestinationPath $zipPath
           
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: typst_flutter_example_windows_x64
           path: typst_flutter_example_windows_x64.zip
