@@ -1,3 +1,15 @@
+## 2.2.1
+
+### Bug Fixes
+
+- **Android**: Fixed auto-download failing with `Cannot operate on packages inside the cache` — the setup command is now run from the consumer app root instead of the pub cache directory.
+- **iOS**: Same root-cause fix — the podspec now runs `dart run typst_flutter:setup` from the app root (`File.expand_path('..', Dir.pwd)`) rather than from inside the pub cache.
+- **macOS**: Added auto-download and fallback error — the podspec previously had no binary detection at all and would silently produce a broken build.
+- **Linux**: Added auto-download via CMake `execute_process` from the app root, with a clear `FATAL_ERROR` if binaries are still missing.
+- **Windows desktop**: Same as Linux, using `cmd /c` for Windows shell compatibility.
+
+---
+
 ## 2.2.0
 
 ### Engine Upgrade
