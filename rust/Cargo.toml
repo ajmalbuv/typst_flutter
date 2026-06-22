@@ -1,6 +1,6 @@
 [package]
 name = "typst_flutter"
-version = "2.2.0"
+version = "2.2.1"
 edition = "2024"
 description = "Native Typst typesetting compiler for Flutter via Rust FFI"
 license = "Apache-2.0"

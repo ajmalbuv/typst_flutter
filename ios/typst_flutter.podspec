@@ -34,8 +34,14 @@ Pod::Spec.new do |s|
   )
 
   if !File.exist?(prebuilt_xcframework)
-    puts "typst_flutter: Auto-downloading prebuilt native libraries..."
-    system("cd '#{File.expand_path('..', __dir__)}' && dart run typst_flutter:setup")
+    puts 'typst_flutter: Auto-downloading prebuilt native libraries...'
+    # IMPORTANT: `dart run` cannot operate inside the pub cache.
+    # During `pod install`, Dir.pwd is the app's ios/ directory.
+    # The app root (where pubspec.yaml lives) is one level up.
+    # The setup script uses Dart's package URI resolution internally to find
+    # where to place the downloaded binaries.
+    app_root = File.expand_path('..', Dir.pwd)
+    system("cd '#{app_root}' && dart run typst_flutter:setup")
   end
 
   if File.exist?(prebuilt_xcframework)

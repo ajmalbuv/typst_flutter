@@ -37,7 +37,19 @@ dependencies:
   typst_flutter: ^2.0.0
 ```
 
-That's it! When you run `flutter build` or `flutter run`, the platform build scripts (Gradle/CocoaPods) will automatically fetch the correct native binaries for your architecture in the background.
+Then fetch dependencies and run the **required** one-time setup:
+
+```bash
+flutter pub get
+dart run typst_flutter:setup
+```
+
+> **Why is this required?**
+> `typst_flutter` ships a native Rust library (~15MB per ABI). Because pub.dev has a 100MB size limit, the pre-built binaries live on GitHub Releases. The setup script downloads the correct binaries for your platform and places them where the Flutter build system expects them.
+>
+> You only need to run this once per version upgrade.
+
+> **Tip:** The native build systems (Gradle, CocoaPods, CMake) will try to run `dart run typst_flutter:setup` automatically at build time if binaries are missing. This is best-effort — if it fails for any reason, just run it manually from your app root and rebuild.
 
 ## Usage
 

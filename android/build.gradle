@@ -6,7 +6,8 @@
 // Pre-built binary path (preferred — no Rust required):
 //   Run `dart run typst_flutter:setup` once after `flutter pub get`.
 //   This downloads the pre-built .so files into .typst_flutter_prebuilt/android/
-//   and this build file packages them directly.
+//   inside the package root (resolved via Dart's package URI), and this build
+//   file packages them directly.
 //
 // Cargokit fallback (requires Rust + cargo installed):
 //   If pre-built binaries are absent, Cargokit compiles the Rust crate from
@@ -36,8 +37,14 @@ apply plugin: 'com.android.library'
 
 // ── Pre-built binary detection ────────────────────────────────────────────────
 //
-// We look for pre-built binaries in the `.typst_flutter_prebuilt/android` folder.
-// This folder is created by running `dart run typst_flutter:setup`.
+// pluginRoot is the directory containing pubspec.yaml for typst_flutter.
+// For local path-dependency development this is the repo root.
+// For published packages this is inside the pub cache (e.g. D:\.pub-cache\...).
+//
+// The `dart run typst_flutter:setup` command MUST be run from the consumer
+// app's root (where its pubspec.yaml lives). It resolves the package URI
+// internally, so it always places the binaries in the correct pluginRoot
+// regardless of whether this is a local or cached package.
 
 def pluginRoot = project.projectDir.parentFile
 def prebuiltDir = new File(pluginRoot, '.typst_flutter_prebuilt/android')
@@ -46,6 +53,35 @@ def localJniLibsDir = new File(project.projectDir, 'src/main/jniLibs/arm64-v8a')
 def hasLocalBinaries = localJniLibsDir.exists()
 def hasPrebuiltBinaries = prebuiltDir.exists()
 def usePrebuilt = hasLocalBinaries || hasPrebuiltBinaries
+
+// Auto-download: run `dart run typst_flutter:setup` from the consumer app root.
+// NOTE: We MUST use the consumer app root (rootProject.projectDir.parentFile)
+// as the working directory, NOT pluginRoot — because `dart run` cannot operate
+// on packages inside the pub cache. The setup script resolves the package URI
+// itself and deposits the binaries into the correct location.
+if (!hasLocalBinaries && !hasPrebuiltBinaries) {
+    logger.lifecycle('typst_flutter: Auto-downloading prebuilt native libraries...')
+    try {
+        // Consumer app root — one level above the android/ folder of the app.
+        def consumerAppRoot = rootProject.projectDir.parentFile
+        def isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
+        def cmd = isWindows
+            ? ['cmd', '/c', 'dart run typst_flutter:setup']
+            : ['sh', '-c', 'dart run typst_flutter:setup']
+        def pb = new ProcessBuilder(cmd)
+        def logFile = new File(consumerAppRoot, 'typst_flutter_setup.log')
+        pb.redirectOutput(logFile)
+        pb.redirectErrorStream(true)
+        pb.directory(consumerAppRoot)
+        def proc = pb.start()
+        proc.waitFor()
+        // Re-check after download — setup.dart places files in pluginRoot
+        hasPrebuiltBinaries = prebuiltDir.exists()
+        usePrebuilt = hasLocalBinaries || hasPrebuiltBinaries
+    } catch (Exception e) {
+        logger.lifecycle('typst_flutter: Auto-download failed. ' + e.message)
+    }
+}
 
 android {
     if (project.android.hasProperty('namespace')) {
@@ -64,26 +100,6 @@ android {
         minSdkVersion 21
     }
 
-    if (!hasLocalBinaries && !hasPrebuiltBinaries) {
-        logger.lifecycle('typst_flutter: Auto-downloading prebuilt native libraries...')
-        try {
-            exec {
-                workingDir pluginRoot
-                def isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
-                if (isWindows) {
-                    commandLine 'cmd', '/c', 'dart run typst_flutter:setup'
-                } else {
-                    commandLine 'sh', '-c', 'dart run typst_flutter:setup'
-                }
-                ignoreExitValue true
-            }
-            hasPrebuiltBinaries = prebuiltDir.exists()
-            usePrebuilt = hasLocalBinaries || hasPrebuiltBinaries
-        } catch (Exception e) {
-            logger.lifecycle('typst_flutter: Auto-download failed. ' + e.message)
-        }
-    }
-
     if (!hasLocalBinaries && hasPrebuiltBinaries) {
         sourceSets {
             main {
@@ -99,7 +115,7 @@ if (!usePrebuilt) {
     │  typst_flutter: pre-built binaries not found.                    │
     │  Falling back to Cargokit (requires Rust on build machine).      │
     │                                                                  │
-    │  To avoid compiling from source, run once:                       │
+    │  To avoid compiling from source, run once from your app root:    │
     │    dart run typst_flutter:setup                                  │
     └──────────────────────────────────────────────────────────────────┘
     ''')
@@ -111,6 +127,11 @@ if (!usePrebuilt) {
             libname = 'typst_flutter'
         }
     } else {
-        throw new GradleException("typst_flutter: Prebuilt binaries are missing, auto-download failed, AND Cargokit is missing from rust_builder. Please run `flutter_rust_bridge_codegen integrate` to restore Cargokit, or connect to the internet to allow auto-download.")
+        throw new GradleException(
+            'typst_flutter: Prebuilt binaries are missing, auto-download failed, '
+            + 'AND Cargokit is missing from rust_builder. '
+            + 'Run `dart run typst_flutter:setup` from your app root, or '
+            + 'run `flutter_rust_bridge_codegen integrate` to restore Cargokit.'
+        )
     }
 }

@@ -8,7 +8,7 @@ hero:
     file: ../../assets/houston.webp
   actions:
     - text: Get Started
-      link: typst_flutter/guides/getting-started/
+      link: guides/getting-started/
       icon: right-arrow
       variant: primary
     - text: pub.dev
@@ -33,10 +33,10 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
     Runs directly on the device using a Rust core, compiling most documents in
     under 100ms. No WASM overhead, no WebViews, no servers.
   </Card>
-  <Card title="Zero Configuration" icon="puzzle">
-    Just add the package to your `pubspec.yaml` and click run! The native build
-    systems automatically download the required 15MB prebuilt binaries on the
-    fly.
+  <Card title="One-time Setup" icon="puzzle">
+    Run `dart run typst_flutter:setup` once after `flutter pub get`. This
+    downloads the prebuilt 15MB native binaries from GitHub Releases and caches
+    them locally — no Rust toolchain required.
   </Card>
   <Card title="Instant Live Previews" icon="eye">
     Includes drop-in `TypstDocumentViewer` and `TypstView` widgets that cache

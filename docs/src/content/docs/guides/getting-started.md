@@ -13,11 +13,35 @@ Add the package to your Flutter project's `pubspec.yaml`:
 flutter pub add typst_flutter
 ```
 
-## Zero-Configuration Setup
+## Setup (required once)
 
-That's it! You're completely done.
+After adding the package, run the setup script from your **app root**:
 
-When you run `flutter build` or `flutter run`, the native Android Gradle and iOS CocoaPods build systems will automatically fetch the required prebuilt native libraries (about 15MB) in the background.
+```bash
+flutter pub get
+dart run typst_flutter:setup
+```
+
+This downloads the prebuilt native Typst libraries (~15MB) from GitHub Releases
+and caches them in your pub cache. You only need to do this once per version
+upgrade — no Rust toolchain required.
+
+> **Why is this step needed?**
+> pub.dev has a 100MB package size limit. The native `.so`/`.dll`/`.a` binaries
+> live on GitHub Releases instead, and this script fetches the right one for your
+> platform automatically.
+
+### Build-time auto-download
+
+The native build scripts (Gradle for Android, CocoaPods for iOS/macOS, CMake for
+Linux/Windows) will attempt to run `dart run typst_flutter:setup` automatically
+if the binaries aren’t already present when you build. This is a best-effort
+convenience — **if it fails for any reason** (no internet, permission issue, etc.),
+just run the command manually from your app root and rebuild:
+
+```bash
+dart run typst_flutter:setup
+```
 
 ## Default Built-in Fonts
 
@@ -85,8 +109,16 @@ class TypstPreview extends StatelessWidget {
 }
 ```
 
-## Advanced: Compiling from Source
+## Advanced: Building from Source (Cargokit fallback)
 
-If you are building for an unsupported architecture, or building offline, the auto-download mechanism will gracefully fail. In this case, the build will fall back to **Cargokit**, which will compile the Rust core from scratch.
+If the prebuilt binaries aren't available for your target (e.g. an unsupported
+architecture or a fully-offline build machine), and the auto-download also fails,
+Android and iOS builds will fall back to **Cargokit**, which compiles the Rust
+core from scratch.
 
-To use the source-compilation fallback, you must install [Rust](https://rustup.rs/) on your build machine. First-time compilation will take 5–15 minutes depending on your CPU.
+To use the source-compilation fallback, install [Rust](https://rustup.rs/) on
+your build machine. First-time compilation will take 5–15 minutes depending on
+your CPU.
+
+Linux and Windows desktop builds do **not** have a Cargokit fallback — they will
+emit a clear error message asking you to run `dart run typst_flutter:setup`.
