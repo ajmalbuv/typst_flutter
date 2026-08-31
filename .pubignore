@@ -9,6 +9,7 @@ justfile
 GEMINI.md
 todo.md
 RELEASE_PROCESS.md
+IMPLEMENTATION_PLAN.md
 
 # Large Documentation Source
 docs/

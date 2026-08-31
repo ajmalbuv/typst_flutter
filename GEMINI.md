@@ -208,14 +208,14 @@ After all jobs complete:
 
 ---
 
-## Current state (as of v2.0.0)
+## Current state (as of v3.0.0)
 
 ### Future / nice to have
 
 - [ ] Incremental compilation cache (reuse world across calls with same fonts)
 - [ ] Font subsetting to reduce bundle size
 - [ ] Multi-file project support (directory-based VFS)
-- [ ] Typst Package Registry (`#import "@preview/..."`)
+- [x] Typst Package Registry (`#import "@preview/..."`) — Added in v3.0.0
 
 ---
 
@@ -230,6 +230,9 @@ typst-render = "0.15.0"   # raster image render (RGBA pixels)
 typst-svg = "0.15.0"      # SVG export
 flutter_rust_bridge = "2"  # Dart ↔ Rust bridge
 time = "0.3"               # date/time for typst::World::today()
+ureq = "3"                # HTTP client for package resolution (rustls TLS backend)
+flate2 = "1"              # gzip decompression for package archives
+tar = "0.4"               # tar archive unpacking
 ```
 
 ### `rust/src/api/typst.rs` — FRB-bridged API
@@ -243,8 +246,13 @@ impl TypstEngine {
     #[frb(sync)]
     pub fn new() -> Self;                              // bundled fonts loaded
     pub fn add_fonts(&mut self, font_data: Vec<Vec<u8>>);
-    pub fn compile(&mut self, markup: String,
-        files: Vec<VirtualFile>, sys_time: Option<i64>,
+    pub fn compile(
+        &mut self,
+        markup: String,
+        files: Vec<VirtualFile>,
+        sys_time: Option<i64>,
+        inputs: Option<HashMap<String, String>>,
+        allow_packages: bool,
     ) -> Result<CompiledDocument, TypstCompileError>;
 }
 
@@ -268,13 +276,14 @@ Typst requires a `World` trait implementation that provides:
 - `library()` — built-in Typst standard library
 - `book()` — font book (index of available fonts)
 - `main()` — the main source file
-- `source(id)` — resolve file IDs to source text
-- `file(id)` — resolve file IDs to binary data (images, data files)
+- `source(id)` — resolve file IDs to source text (handles project files & package imports)
+- `file(id)` — resolve file IDs to binary data (images, data files, package files)
 - `font(index)` — get font by index
 - `today(offset)` — current date (uses `sys_time` passed from Dart)
 
 `SimpleWorld` implements all of these from data passed in via FFI.
-It does not touch the filesystem. Everything is in-memory.
+When `allow_packages` is `true`, packages imported via `@preview/...` are automatically
+downloaded from `packages.typst.org`, decompressed, and cached in memory across the engine's lifecycle.
 The virtual file system is reset on every `compile()` call.
 
 ---
@@ -296,6 +305,7 @@ Future<TypstDocument> compile({
   FileSource? files,
   DateTime? date,
   Map<String, String>? inputs,
+  bool allowPackages = true,
 })
 
 // Query document structure/metadata using a Typst selector

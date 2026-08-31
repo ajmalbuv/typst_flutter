@@ -1,9 +1,14 @@
 use std::collections::HashMap;
+use std::io::Read;
+use std::sync::RwLock;
 
 use flutter_rust_bridge::frb;
 use typst::diag::FileError;
 use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue};
-use typst::syntax::{DiagSpan, DiagSpanKind, FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{
+    DiagSpan, DiagSpanKind, FileId, RootedPath, Source, VirtualPath, VirtualRoot,
+    package::PackageSpec,
+};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
@@ -188,11 +193,18 @@ impl TypstEngine {
         files: Vec<VirtualFile>,
         sys_time: Option<i64>,
         inputs: Option<HashMap<String, String>>,
+        allow_packages: bool,
     ) -> Result<CompiledDocument, TypstCompileError> {
         self.world.set_markup(markup);
         self.world.set_files(files);
         self.world.set_sys_time(sys_time);
         self.world.set_inputs(inputs);
+        self.world.set_allow_packages(allow_packages);
+
+        // Pre-resolve any packages referenced in the source / files.
+        if allow_packages {
+            self.world.pre_resolve_packages()?;
+        }
 
         let warned = typst::compile::<PagedDocument>(&self.world);
 
@@ -277,6 +289,12 @@ struct SimpleWorld {
     /// Virtual file system: normalised path string → file bytes.
     files: HashMap<String, Bytes>,
     sys_time: Option<i64>,
+    /// Thread-safe in-memory cache of downloaded packages.
+    /// Key: PackageSpec (namespace + name + version)
+    /// Value: Map of virtual path (e.g. "lib.typ") → file bytes
+    package_cache: RwLock<HashMap<PackageSpec, HashMap<String, Bytes>>>,
+    /// Whether to allow downloading packages from the registry.
+    allow_packages: bool,
 }
 
 impl SimpleWorld {
@@ -307,7 +325,13 @@ impl SimpleWorld {
             ),
             files: HashMap::new(),
             sys_time: None,
+            package_cache: RwLock::new(HashMap::new()),
+            allow_packages: true,
         }
+    }
+
+    fn set_allow_packages(&mut self, allow: bool) {
+        self.allow_packages = allow;
     }
 
     fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
@@ -361,6 +385,328 @@ impl SimpleWorld {
         }
         self.library = LazyHash::new(Library::builder().with_inputs(dict).build());
     }
+
+    /// Downloads and caches a Typst package from the official registry.
+    ///
+    /// Fetches `https://packages.typst.org/{namespace}/{name}-{version}.tar.gz`,
+    /// decompresses it, and stores all files in `self.package_cache`.
+    ///
+    /// No-ops if the package is already cached.
+    fn resolve_package(&self, spec: &PackageSpec) -> Result<(), FileError> {
+        // Fast path: already cached
+        {
+            let cache = self.package_cache.read().map_err(|e| {
+                FileError::Other(Some(format!("package cache lock error: {e}").into()))
+            })?;
+            if cache.contains_key(spec) {
+                return Ok(());
+            }
+        }
+
+        if !self.allow_packages {
+            return Err(FileError::Other(Some(
+                format!("package resolution is disabled; cannot download {spec}").into(),
+            )));
+        }
+
+        if spec.namespace.as_str() != "preview" {
+            return Err(FileError::Other(Some(
+                format!(
+                    "unsupported package namespace '{}' (only '@preview' is supported)",
+                    spec.namespace
+                )
+                .into(),
+            )));
+        }
+
+        let url = format!(
+            "https://packages.typst.org/{}/{}-{}.tar.gz",
+            spec.namespace, spec.name, spec.version
+        );
+
+        // Download the archive
+        let response = ureq::get(&url).call().map_err(|e| {
+            FileError::Other(Some(
+                format!("failed to download package {spec} from {url}: {e}").into(),
+            ))
+        })?;
+
+        let mut compressed = Vec::new();
+        response
+            .into_body()
+            .as_reader()
+            .read_to_end(&mut compressed)
+            .map_err(|e| {
+                FileError::Other(Some(
+                    format!("failed to read package {spec} body: {e}").into(),
+                ))
+            })?;
+
+        // Decompress gzip and extract tar
+        let decoder = flate2::read::GzDecoder::new(&compressed[..]);
+        let mut archive = tar::Archive::new(decoder);
+
+        let mut raw_entries: Vec<(String, Vec<u8>)> = Vec::new();
+        let mut root_prefix: Option<String> = None;
+
+        for entry in archive.entries().map_err(|e| {
+            FileError::Other(Some(
+                format!("failed to read tar entries for {spec}: {e}").into(),
+            ))
+        })? {
+            let mut entry = entry.map_err(|e| {
+                FileError::Other(Some(
+                    format!("failed to read tar entry for {spec}: {e}").into(),
+                ))
+            })?;
+
+            if entry.header().entry_type().is_dir() {
+                continue;
+            }
+
+            let path = entry.path().map_err(|e| {
+                FileError::Other(Some(format!("invalid path in {spec}: {e}").into()))
+            })?;
+
+            let path_str = path.to_string_lossy().replace('\\', "/");
+            let path_clean = path_str.trim_start_matches("./").to_string();
+
+            let mut data = Vec::new();
+            entry.read_to_end(&mut data).map_err(|e| {
+                FileError::Other(Some(
+                    format!("failed to read file {path_clean} from {spec}: {e}").into(),
+                ))
+            })?;
+
+            if path_clean == "typst.toml" {
+                root_prefix = Some(String::new());
+            } else if path_clean.ends_with("/typst.toml") {
+                let prefix_len = path_clean.len() - "typst.toml".len();
+                root_prefix = Some(path_clean[..prefix_len].to_string());
+            }
+
+            raw_entries.push((path_clean, data));
+        }
+
+        let prefix = root_prefix.unwrap_or_else(|| {
+            if let Some((first_path, _)) = raw_entries.first() {
+                if let Some(idx) = first_path.find('/') {
+                    return first_path[..=idx].to_string();
+                }
+            }
+            String::new()
+        });
+
+        let mut files = HashMap::new();
+        for (path, data) in raw_entries {
+            let normalized = if !prefix.is_empty() && path.starts_with(&prefix) {
+                path[prefix.len()..].trim_start_matches('/').to_string()
+            } else {
+                path.trim_start_matches('/').to_string()
+            };
+
+            if !normalized.is_empty() {
+                files.insert(normalized, Bytes::new(data));
+            }
+        }
+
+        let mut cache = self
+            .package_cache
+            .write()
+            .map_err(|e| FileError::Other(Some(format!("package cache lock error: {e}").into())))?;
+        cache.insert(spec.clone(), files);
+        Ok(())
+    }
+
+    fn resolve_package_file(
+        &self,
+        spec: &PackageSpec,
+        vpath: &VirtualPath,
+    ) -> Result<Bytes, FileError> {
+        let key = vpath.get_without_slash().replace('\\', "/");
+
+        // 1. Check cache
+        {
+            let cache = self.package_cache.read().map_err(|e| {
+                FileError::Other(Some(format!("package cache lock error: {e}").into()))
+            })?;
+            if let Some(pkg_files) = cache.get(spec) {
+                return pkg_files
+                    .get(&key)
+                    .cloned()
+                    .ok_or_else(|| FileError::NotFound(format!("{spec}/{key}").into()));
+            }
+        }
+
+        // 2. Not cached: try on-demand download if allowed
+        if !self.allow_packages {
+            return Err(FileError::Other(Some(
+                format!("package resolution is disabled; cannot download {spec}").into(),
+            )));
+        }
+
+        self.resolve_package(spec)?;
+
+        // 3. Read from cache after download
+        let cache = self
+            .package_cache
+            .read()
+            .map_err(|e| FileError::Other(Some(format!("package cache lock error: {e}").into())))?;
+        let pkg_files = cache.get(spec).ok_or_else(|| {
+            FileError::Other(Some(
+                format!("package {spec} not found in cache after download").into(),
+            ))
+        })?;
+
+        pkg_files
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| FileError::NotFound(format!("{spec}/{key}").into()))
+    }
+
+    /// Scans the main source (and any included .typ files in the VFS) for
+    /// package import patterns and pre-downloads them.
+    fn pre_resolve_packages(&mut self) -> Result<(), TypstCompileError> {
+        let mut specs_to_resolve: Vec<PackageSpec> = Vec::new();
+
+        // Scan main source for @namespace/name:version patterns
+        self.collect_package_specs(self.source.text(), &mut specs_to_resolve);
+
+        // Also scan any .typ files in the VFS
+        for (key, bytes) in &self.files {
+            if key.ends_with(".typ") {
+                if let Ok(text) = std::str::from_utf8(bytes) {
+                    self.collect_package_specs(text, &mut specs_to_resolve);
+                }
+            }
+        }
+
+        // Resolve each unique package and its transitive deps
+        let mut resolved: std::collections::HashSet<PackageSpec> = std::collections::HashSet::new();
+        let mut queue = std::collections::VecDeque::from(specs_to_resolve);
+
+        while let Some(spec) = queue.pop_front() {
+            if resolved.contains(&spec) {
+                continue;
+            }
+
+            self.resolve_package(&spec).map_err(|e| TypstCompileError {
+                diagnostics: vec![TypstDiagnostic {
+                    severity: TypstSeverity::Error,
+                    message: format!("Failed to resolve package {spec}: {e}"),
+                    hints: vec![],
+                    span_start: None,
+                    span_end: None,
+                }],
+            })?;
+
+            resolved.insert(spec.clone());
+
+            // Scan newly downloaded package files for transitive deps
+            let cache = self.package_cache.read().map_err(|e| TypstCompileError {
+                diagnostics: vec![TypstDiagnostic {
+                    severity: TypstSeverity::Error,
+                    message: format!("Lock error reading package cache: {e}"),
+                    hints: vec![],
+                    span_start: None,
+                    span_end: None,
+                }],
+            })?;
+
+            if let Some(pkg_files) = cache.get(&spec) {
+                for (path, bytes) in pkg_files {
+                    if path.ends_with(".typ") {
+                        if let Ok(text) = std::str::from_utf8(bytes) {
+                            let mut transitive = Vec::new();
+                            self.collect_package_specs(text, &mut transitive);
+                            for ts in transitive {
+                                if !resolved.contains(&ts) {
+                                    queue.push_back(ts);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Extracts PackageSpec values from `@namespace/name:major.minor.patch` patterns.
+    fn collect_package_specs(&self, text: &str, out: &mut Vec<PackageSpec>) {
+        let mut chars = text.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch != '@' {
+                continue;
+            }
+            if let Some(spec) = Self::try_parse_package_spec(&mut chars) {
+                out.push(spec);
+            }
+        }
+    }
+
+    fn try_parse_package_spec(
+        chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    ) -> Option<PackageSpec> {
+        // Parse namespace (alphanumeric + hyphens)
+        let mut namespace = String::new();
+        while let Some(&ch) = chars.peek() {
+            if ch.is_alphanumeric() || ch == '-' {
+                namespace.push(ch);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        if namespace.is_empty() || chars.next() != Some('/') {
+            return None;
+        }
+
+        // Parse name (alphanumeric + hyphens + underscores)
+        let mut name = String::new();
+        while let Some(&ch) = chars.peek() {
+            if ch.is_alphanumeric() || ch == '-' || ch == '_' {
+                name.push(ch);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        if name.is_empty() || chars.next() != Some(':') {
+            return None;
+        }
+
+        // Parse version (major.minor.patch)
+        let mut version_str = String::new();
+        while let Some(&ch) = chars.peek() {
+            if ch.is_ascii_digit() || ch == '.' {
+                version_str.push(ch);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+
+        let parts: Vec<&str> = version_str.split('.').collect();
+        if parts.len() != 3 {
+            return None;
+        }
+
+        let major = parts[0].parse().ok()?;
+        let minor = parts[1].parse().ok()?;
+        let patch = parts[2].parse().ok()?;
+
+        Some(PackageSpec {
+            namespace: namespace.into(),
+            name: name.into(),
+            version: typst::syntax::package::PackageVersion {
+                major,
+                minor,
+                patch,
+            },
+        })
+    }
 }
 
 impl typst::World for SimpleWorld {
@@ -382,17 +728,24 @@ impl typst::World for SimpleWorld {
             return Ok(self.source.clone());
         }
 
-        // Included `.typ` files: look them up in the virtual file system,
-        // parse the bytes as UTF-8, and return a fresh Source.
-        let vpath = id.vpath();
-        let key = vpath.get_without_slash().replace('\\', "/");
-
-        match self.files.get(&key) {
-            Some(bytes) => {
-                let text = std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
+        match id.root() {
+            VirtualRoot::Project => {
+                let vpath = id.vpath();
+                let key = vpath.get_without_slash().replace('\\', "/");
+                match self.files.get(&key) {
+                    Some(bytes) => {
+                        let text =
+                            std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
+                        Ok(Source::new(id, text.to_string()))
+                    }
+                    None => Err(FileError::NotFound(vpath.get_without_slash().into())),
+                }
+            }
+            VirtualRoot::Package(spec) => {
+                let bytes = self.resolve_package_file(spec, id.vpath())?;
+                let text = std::str::from_utf8(&bytes).map_err(|_| FileError::InvalidUtf8)?;
                 Ok(Source::new(id, text.to_string()))
             }
-            None => Err(FileError::NotFound(vpath.get_without_slash().into())),
         }
     }
 
@@ -401,15 +754,17 @@ impl typst::World for SimpleWorld {
     }
 
     fn file(&self, id: FileId) -> Result<Bytes, FileError> {
-        // Resolve the virtual path to a normalised forward-slash string and
-        // look it up in our in-memory virtual file system.
-        let vpath = id.vpath();
-        let key = vpath.get_without_slash().replace('\\', "/");
-
-        self.files
-            .get(&key)
-            .cloned()
-            .ok_or_else(|| FileError::NotFound(vpath.get_without_slash().into()))
+        match id.root() {
+            VirtualRoot::Project => {
+                let vpath = id.vpath();
+                let key = vpath.get_without_slash().replace('\\', "/");
+                self.files
+                    .get(&key)
+                    .cloned()
+                    .ok_or_else(|| FileError::NotFound(vpath.get_without_slash().into()))
+            }
+            VirtualRoot::Package(spec) => self.resolve_package_file(spec, id.vpath()),
+        }
     }
 
     fn today(&self, offset: Option<Duration>) -> Option<Datetime> {
@@ -533,7 +888,7 @@ mod tests {
     fn test_basic_compilation() {
         let mut engine = TypstEngine::new();
         let doc = engine
-            .compile("= Hello".to_string(), vec![], None, None)
+            .compile("= Hello".to_string(), vec![], None, None, true)
             .unwrap();
         let pdf = doc.export_pdf().unwrap();
         assert!(!pdf.is_empty());
@@ -543,7 +898,7 @@ mod tests {
     #[test]
     fn test_compile_error() {
         let mut engine = TypstEngine::new();
-        let result = engine.compile("#invalid_call()".to_string(), vec![], None, None);
+        let result = engine.compile("#invalid_call()".to_string(), vec![], None, None, true);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(!err.diagnostics.is_empty());
@@ -554,7 +909,7 @@ mod tests {
     fn test_svg_export() {
         let mut engine = TypstEngine::new();
         let doc = engine
-            .compile("= Hello".to_string(), vec![], None, None)
+            .compile("= Hello".to_string(), vec![], None, None, true)
             .unwrap();
         let svg = doc.export_svg(0).unwrap();
         assert!(svg.contains("<svg"));
@@ -564,7 +919,7 @@ mod tests {
     fn test_page_info() {
         let mut engine = TypstEngine::new();
         let doc = engine
-            .compile("= Hello".to_string(), vec![], None, None)
+            .compile("= Hello".to_string(), vec![], None, None, true)
             .unwrap();
         let info = doc.page_info(0).unwrap();
         assert!(info.width_pt > 0.0);
@@ -578,7 +933,7 @@ mod tests {
     fn test_render_page() {
         let mut engine = TypstEngine::new();
         let doc = engine
-            .compile("= Hello".to_string(), vec![], None, None)
+            .compile("= Hello".to_string(), vec![], None, None, true)
             .unwrap();
         let render = doc.render_page(0, 2.0).unwrap();
         assert!(render.width > 0);
@@ -593,7 +948,13 @@ mod tests {
     fn test_query() {
         let mut engine = TypstEngine::new();
         let doc = engine
-            .compile("= Heading 1\n<my-label>".to_string(), vec![], None, None)
+            .compile(
+                "= Heading 1\n<my-label>".to_string(),
+                vec![],
+                None,
+                None,
+                true,
+            )
             .unwrap();
         let json = engine.query(&doc, "<my-label>".to_string()).unwrap();
         assert!(json.contains("Heading 1"));
@@ -603,7 +964,7 @@ mod tests {
     fn test_export_svg_out_of_bounds() {
         let mut engine = TypstEngine::new();
         let doc = engine
-            .compile("= Hello".to_string(), vec![], None, None)
+            .compile("= Hello".to_string(), vec![], None, None, true)
             .unwrap();
         let err = doc.export_svg(1);
         assert!(err.is_err());
@@ -680,6 +1041,85 @@ mod tests {
     }
 
     #[test]
+    fn test_collect_package_specs() {
+        let world = SimpleWorld::new();
+        let text = r#"
+            #import "@preview/tablex:0.0.8": tablex
+            #import "@preview/cetz:0.3.0": *
+            Some text without imports
+            #import "@local/my-pkg:1.2.3": foo
+        "#;
+        let mut specs = Vec::new();
+        world.collect_package_specs(text, &mut specs);
+        assert_eq!(specs.len(), 3);
+        assert_eq!(specs[0].namespace.as_str(), "preview");
+        assert_eq!(specs[0].name.as_str(), "tablex");
+        assert_eq!(specs[0].version.major, 0);
+        assert_eq!(specs[0].version.minor, 0);
+        assert_eq!(specs[0].version.patch, 8);
+        assert_eq!(specs[1].name.as_str(), "cetz");
+        assert_eq!(specs[2].namespace.as_str(), "local");
+    }
+
+    #[test]
+    fn test_package_spec_parsing_edge_cases() {
+        let world = SimpleWorld::new();
+
+        // Invalid: no version
+        let mut specs = Vec::new();
+        world.collect_package_specs(r#"#import "@preview/pkg""#, &mut specs);
+        assert!(specs.is_empty());
+
+        // Invalid: partial version
+        let mut specs = Vec::new();
+        world.collect_package_specs(r#"#import "@preview/pkg:1.2""#, &mut specs);
+        assert!(specs.is_empty());
+
+        // Valid: in string context
+        let mut specs = Vec::new();
+        world.collect_package_specs(r#"@preview/valid_name-2:1.0.0"#, &mut specs);
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].name.as_str(), "valid_name-2");
+    }
+
+    #[test]
+    fn test_compile_disallow_packages() {
+        let mut engine = TypstEngine::new();
+        let result = engine.compile(
+            r#"#import "@preview/tablex:0.0.8": *"#.to_string(),
+            vec![],
+            None,
+            None,
+            false, // allow_packages = false
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore] // Run with: cargo test -- --ignored
+    fn test_package_download_and_compile() {
+        let mut engine = TypstEngine::new();
+        let result = engine.compile(
+            r#"#import "@preview/cetz:0.3.4": canvas, draw
+#canvas({
+  draw.line((0, 0), (1, 1))
+})"#
+            .to_string(),
+            vec![],
+            None,
+            None,
+            true,
+        );
+        assert!(
+            result.is_ok(),
+            "Failed to compile with package: {:?}",
+            result.err()
+        );
+        let doc = result.unwrap();
+        assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
     fn test_coverage_extra() {
         use typst::World;
         let mut engine = TypstEngine::new();
@@ -693,7 +1133,7 @@ mod tests {
 
         // Test Detached span via syntax error or manual
         let markup = "#set text(font: \"__NonExistent__\")\n= Test\n#assert(1 == 1)".to_string();
-        let doc = engine.compile(markup, vec![], None, None).unwrap();
+        let doc = engine.compile(markup, vec![], None, None, true).unwrap();
         let _warnings = doc.warnings();
 
         // 1. Cover query evaluate selector error (lines 245-251)
@@ -716,6 +1156,7 @@ mod tests {
             vec![],
             None,
             Some(inputs),
+            true,
         );
     }
 

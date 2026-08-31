@@ -1,3 +1,19 @@
+## 3.0.0
+
+### New Features
+
+- **Typst Package Resolution**: `#import "@preview/..."` is now supported out of the box!
+  - Packages are automatically fetched from `packages.typst.org`, decompressed, and cached in memory across the engine's lifecycle.
+  - Transitive dependencies between packages are resolved and loaded automatically.
+  - Added `allowPackages` (default `true`) parameter to `TypstCompiler.compile()`. Set to `false` for offline-only environments or restricted networks.
+
+### Dependencies
+
+- Added `ureq` v3 (pure Rust TLS with `rustls`) for minimal footprint and cross-platform network requests without OpenSSL dependencies.
+- Added `flate2` and `tar` for high-performance `.tar.gz` package decompression.
+
+---
+
 ## 2.2.1
 
 ### Bug Fixes

@@ -117,6 +117,7 @@ abstract class RustLibApi extends BaseApi {
     required List<VirtualFile> files,
     PlatformInt64? sysTime,
     Map<String, String>? inputs,
+    required bool allowPackages,
   });
 
   TypstEngine crateApiTypstTypstEngineNew();
@@ -409,6 +410,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required List<VirtualFile> files,
     PlatformInt64? sysTime,
     Map<String, String>? inputs,
+    required bool allowPackages,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -422,6 +424,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_list_virtual_file(files, serializer);
           sse_encode_opt_box_autoadd_i_64(sysTime, serializer);
           sse_encode_opt_Map_String_String_None(inputs, serializer);
+          sse_encode_bool(allowPackages, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -435,7 +438,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_typst_compile_error,
         ),
         constMeta: kCrateApiTypstTypstEngineCompileConstMeta,
-        argValues: [that, markup, files, sysTime, inputs],
+        argValues: [that, markup, files, sysTime, inputs, allowPackages],
         apiImpl: this,
       ),
     );
@@ -444,7 +447,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTypstTypstEngineCompileConstMeta =>
       const TaskConstMeta(
         debugName: "TypstEngine_compile",
-        argNames: ["that", "markup", "files", "sysTime", "inputs"],
+        argNames: [
+          "that",
+          "markup",
+          "files",
+          "sysTime",
+          "inputs",
+          "allowPackages",
+        ],
       );
 
   @override
@@ -619,6 +629,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
   }
 
   @protected
@@ -921,6 +937,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_i_64(deserializer));
@@ -1174,12 +1196,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
-  }
-
-  @protected
   void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCompiledDocument(
     CompiledDocument self,
@@ -1273,6 +1289,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
   }
 
   @protected
@@ -1518,12 +1540,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.path, serializer);
     sse_encode_list_prim_u_8_strict(self.bytes, serializer);
   }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
-  }
 }
 
 @sealed
@@ -1614,12 +1630,14 @@ class TypstEngineImpl extends RustOpaque implements TypstEngine {
     required List<VirtualFile> files,
     PlatformInt64? sysTime,
     Map<String, String>? inputs,
+    required bool allowPackages,
   }) => RustLib.instance.api.crateApiTypstTypstEngineCompile(
     that: this,
     markup: markup,
     files: files,
     sysTime: sysTime,
     inputs: inputs,
+    allowPackages: allowPackages,
   );
 
   Future<String> query({

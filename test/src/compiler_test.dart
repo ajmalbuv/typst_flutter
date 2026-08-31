@@ -34,6 +34,13 @@ void main() {
       expect(doc, isA<TypstDocument>());
     });
 
+    test('Compilation with allowPackages works successfully', () async {
+      final compiler = await TypstCompiler.create();
+      final doc = await compiler.compile(source: 'Hello', allowPackages: false);
+
+      expect(doc, isA<TypstDocument>());
+    });
+
     test('query returns extracted JSON', () async {
       final compiler = await TypstCompiler.create();
       final doc = await compiler.compile(source: '= Hello');
