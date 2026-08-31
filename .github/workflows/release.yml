@@ -22,7 +22,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross.git
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: "version"
 
       - name: Build Android arm64-v8a
         run: cross build --target aarch64-linux-android --release
