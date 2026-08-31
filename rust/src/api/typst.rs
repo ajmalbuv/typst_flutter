@@ -489,10 +489,10 @@ impl SimpleWorld {
         }
 
         let prefix = root_prefix.unwrap_or_else(|| {
-            if let Some((first_path, _)) = raw_entries.first() {
-                if let Some(idx) = first_path.find('/') {
-                    return first_path[..=idx].to_string();
-                }
+            if let Some((first_path, _)) = raw_entries.first()
+                && let Some(idx) = first_path.find('/')
+            {
+                return first_path[..=idx].to_string();
             }
             String::new()
         });
@@ -574,10 +574,10 @@ impl SimpleWorld {
 
         // Also scan any .typ files in the VFS
         for (key, bytes) in &self.files {
-            if key.ends_with(".typ") {
-                if let Ok(text) = std::str::from_utf8(bytes) {
-                    self.collect_package_specs(text, &mut specs_to_resolve);
-                }
+            if key.ends_with(".typ")
+                && let Ok(text) = std::str::from_utf8(bytes)
+            {
+                self.collect_package_specs(text, &mut specs_to_resolve);
             }
         }
 
@@ -615,14 +615,14 @@ impl SimpleWorld {
 
             if let Some(pkg_files) = cache.get(&spec) {
                 for (path, bytes) in pkg_files {
-                    if path.ends_with(".typ") {
-                        if let Ok(text) = std::str::from_utf8(bytes) {
-                            let mut transitive = Vec::new();
-                            self.collect_package_specs(text, &mut transitive);
-                            for ts in transitive {
-                                if !resolved.contains(&ts) {
-                                    queue.push_back(ts);
-                                }
+                    if path.ends_with(".typ")
+                        && let Ok(text) = std::str::from_utf8(bytes)
+                    {
+                        let mut transitive = Vec::new();
+                        self.collect_package_specs(text, &mut transitive);
+                        for ts in transitive {
+                            if !resolved.contains(&ts) {
+                                queue.push_back(ts);
                             }
                         }
                     }

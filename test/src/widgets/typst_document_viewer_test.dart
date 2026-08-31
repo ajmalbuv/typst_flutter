@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -320,13 +318,11 @@ void main() {
         ),
       );
       await tester.pump();
-      unawaited(
-        tester
-            .state<NavigatorState>(find.byType(Navigator).first)
-            .pushReplacement(
-              MaterialPageRoute<void>(builder: (context) => const SizedBox()),
-            ),
-      );
+      tester
+          .state<NavigatorState>(find.byType(Navigator).first)
+          .pushReplacement(
+            MaterialPageRoute<void>(builder: (context) => const SizedBox()),
+          );
 
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 500));

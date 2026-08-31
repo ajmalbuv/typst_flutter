@@ -1,13 +1,84 @@
-name: Build Windows Example
+name: Build Example App
 
 on:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Select platform(s) to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - windows
+          - linux
+          - macos
 
 jobs:
-  build:
+  build-android:
+    name: Build Android APK
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'android' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android, i686-linux-android
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@cargo-ndk
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          cd example
+          flutter pub get
+
+      - name: Build Android Native Libraries
+        run: |
+          mkdir -p android/src/main/jniLibs/arm64-v8a
+          mkdir -p android/src/main/jniLibs/armeabi-v7a
+          mkdir -p android/src/main/jniLibs/x86_64
+          mkdir -p android/src/main/jniLibs/x86
+
+          cd rust
+          cargo ndk -t aarch64-linux-android -o ../android/src/main/jniLibs build --release
+          cargo ndk -t armv7-linux-androideabi -o ../android/src/main/jniLibs build --release
+          cargo ndk -t x86_64-linux-android -o ../android/src/main/jniLibs build --release
+          cargo ndk -t i686-linux-android -o ../android/src/main/jniLibs build --release
+          cd ..
+
+      - name: Build Flutter Example APK
+        run: |
+          cd example
+          flutter build apk --release
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: typst_flutter_example_android_apk
+          path: example/build/app/outputs/flutter-apk/app-release.apk
+
+  build-windows:
     name: Build Windows x64
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'windows' }}
     runs-on: windows-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -55,13 +126,113 @@ jobs:
             exit 1
           }
 
-          Write-Host "Contents of build directory:"
-          Get-ChildItem -Path $buildDir | Select-Object Name, @{Name="Size(MB)";Expression={$_.Length / 1MB}}
-          
           Compress-Archive -Path "$buildDir/*" -DestinationPath $zipPath
-          
-      - name: Upload Artifact
+
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v6
         with:
           name: typst_flutter_example_windows_x64
           path: typst_flutter_example_windows_x64.zip
+
+  build-linux:
+    name: Build Linux x64
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev pkg-config
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          cd example
+          flutter pub get
+
+      - name: Build Rust Library
+        run: |
+          cd rust
+          cargo build --release
+          cd ..
+          mkdir -p .typst_flutter_prebuilt/linux
+          cp rust/target/release/libtypst_flutter.so .typst_flutter_prebuilt/linux/
+
+      - name: Build Flutter Example (Linux)
+        run: |
+          cd example
+          flutter build linux --release
+
+      - name: Package Artifact
+        run: |
+          tar -czvf typst_flutter_example_linux_x64.tar.gz -C example/build/linux/x64/release/bundle .
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: typst_flutter_example_linux_x64
+          path: typst_flutter_example_linux_x64.tar.gz
+
+  build-macos:
+    name: Build macOS Universal
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin, aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          cd example
+          flutter pub get
+
+      - name: Build Rust Libraries (Universal)
+        run: |
+          cd rust
+          cargo build --target x86_64-apple-darwin --release
+          cargo build --target aarch64-apple-darwin --release
+          cd ..
+          mkdir -p .typst_flutter_prebuilt/macos
+          lipo -create \
+            rust/target/x86_64-apple-darwin/release/libtypst_flutter.a \
+            rust/target/aarch64-apple-darwin/release/libtypst_flutter.a \
+            -output .typst_flutter_prebuilt/macos/libtypst_flutter.a
+
+      - name: Build Flutter Example (macOS)
+        run: |
+          cd example
+          flutter build macos --release
+
+      - name: Package Artifact
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent example/build/macos/Build/Products/Release/typst_flutter_example.app typst_flutter_example_macos.zip
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: typst_flutter_example_macos
+          path: typst_flutter_example_macos.zip

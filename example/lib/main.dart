@@ -57,6 +57,7 @@ Today's date injected from Flutter: #datetime.today().display()
 
   String _currentSource = '';
   TypstCompiler? _compiler;
+  Object? _initError;
 
   @override
   void initState() {
@@ -66,14 +67,26 @@ Today's date injected from Flutter: #datetime.today().display()
   }
 
   Future<void> _initCompiler() async {
-    final compiler = await TypstCompiler.create();
-    if (!mounted) {
-      compiler.dispose();
-      return;
-    }
     setState(() {
-      _compiler = compiler;
+      _initError = null;
     });
+    try {
+      final compiler = await TypstCompiler.create();
+      if (!mounted) {
+        compiler.dispose();
+        return;
+      }
+      setState(() {
+        _compiler = compiler;
+      });
+    } on Object catch (e, st) {
+      debugPrint('TypstCompiler init error: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _initError = e;
+        });
+      }
+    }
   }
 
   @override
@@ -146,6 +159,49 @@ Today's date injected from Flutter: #datetime.today().display()
   @override
   Widget build(BuildContext context) {
     if (_compiler == null) {
+      if (_initError != null) {
+        return Scaffold(
+          backgroundColor: const Color(0xFF1E1E2E),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.redAccent,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Failed to initialize Typst Compiler',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$_initError',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFBAC2DE),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => unawaited(_initCompiler()),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
       return const Scaffold(
         backgroundColor: Color(0xFF1E1E2E),
         body: Center(
