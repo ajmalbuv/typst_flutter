@@ -8,6 +8,72 @@ use typst::syntax::{VirtualPath, package::PackageSpec};
 
 use crate::api::typst::{TypstCompileError, TypstDiagnostic, TypstSeverity};
 
+/// Domain error type for package downloads, decompression, and cache resolution.
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum PackageError {
+    #[error("package cache lock error: {0}")]
+    Lock(String),
+
+    #[error("package resolution is disabled; cannot download {0}")]
+    Disabled(PackageSpec),
+
+    #[error("unsupported package namespace '{0}' (only '@preview' is supported)")]
+    UnsupportedNamespace(String),
+
+    #[error("failed to download package {spec} from {url}: {source}")]
+    Download {
+        spec: PackageSpec,
+        url: String,
+        #[source]
+        source: Box<ureq::Error>,
+    },
+
+    #[error("failed to read package {spec} body: {source}")]
+    ReadBody {
+        spec: PackageSpec,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("failed to read tar entries for {spec}: {source}")]
+    ReadArchive {
+        spec: PackageSpec,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("failed to read tar entry for {spec}: {source}")]
+    ReadEntry {
+        spec: PackageSpec,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("invalid path in {spec}: {source}")]
+    InvalidPath {
+        spec: PackageSpec,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("failed to read file {path} from {spec}: {source}")]
+    ReadFile {
+        path: String,
+        spec: PackageSpec,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("package {0} not found in cache after download")]
+    NotFound(PackageSpec),
+}
+
+impl From<PackageError> for FileError {
+    fn from(err: PackageError) -> Self {
+        FileError::Other(Some(err.to_string().into()))
+    }
+}
+
 /// Manages package downloading, unpacking, and in-memory caching.
 pub(crate) struct PackageResolver {
     /// Thread-safe in-memory cache of downloaded packages.
@@ -39,28 +105,21 @@ impl PackageResolver {
     pub(crate) fn resolve_package(&self, spec: &PackageSpec) -> Result<(), FileError> {
         // Fast path: already cached
         {
-            let cache = self.cache.read().map_err(|e| {
-                FileError::Other(Some(format!("package cache lock error: {e}").into()))
-            })?;
+            let cache = self
+                .cache
+                .read()
+                .map_err(|e| PackageError::Lock(e.to_string()))?;
             if cache.contains_key(spec) {
                 return Ok(());
             }
         }
 
         if !self.allow_packages {
-            return Err(FileError::Other(Some(
-                format!("package resolution is disabled; cannot download {spec}").into(),
-            )));
+            return Err(PackageError::Disabled(spec.clone()).into());
         }
 
         if spec.namespace.as_str() != "preview" {
-            return Err(FileError::Other(Some(
-                format!(
-                    "unsupported package namespace '{}' (only '@preview' is supported)",
-                    spec.namespace
-                )
-                .into(),
-            )));
+            return Err(PackageError::UnsupportedNamespace(spec.namespace.to_string()).into());
         }
 
         let url = format!(
@@ -69,10 +128,10 @@ impl PackageResolver {
         );
 
         // Download the archive
-        let response = ureq::get(&url).call().map_err(|e| {
-            FileError::Other(Some(
-                format!("failed to download package {spec} from {url}: {e}").into(),
-            ))
+        let response = ureq::get(&url).call().map_err(|e| PackageError::Download {
+            spec: spec.clone(),
+            url: url.clone(),
+            source: Box::new(e),
         })?;
 
         let mut compressed = Vec::new();
@@ -80,10 +139,9 @@ impl PackageResolver {
             .into_body()
             .as_reader()
             .read_to_end(&mut compressed)
-            .map_err(|e| {
-                FileError::Other(Some(
-                    format!("failed to read package {spec} body: {e}").into(),
-                ))
+            .map_err(|e| PackageError::ReadBody {
+                spec: spec.clone(),
+                source: e,
             })?;
 
         let files = Self::unpack_package_archive(&compressed, spec)?;
@@ -91,7 +149,7 @@ impl PackageResolver {
         let mut cache = self
             .cache
             .write()
-            .map_err(|e| FileError::Other(Some(format!("package cache lock error: {e}").into())))?;
+            .map_err(|e| PackageError::Lock(e.to_string()))?;
         cache.insert(spec.clone(), files);
         Ok(())
     }
@@ -107,34 +165,35 @@ impl PackageResolver {
         let mut raw_entries: Vec<(String, Vec<u8>)> = Vec::new();
         let mut root_prefix: Option<String> = None;
 
-        for entry in archive.entries().map_err(|e| {
-            FileError::Other(Some(
-                format!("failed to read tar entries for {spec}: {e}").into(),
-            ))
+        for entry in archive.entries().map_err(|e| PackageError::ReadArchive {
+            spec: spec.clone(),
+            source: e,
         })? {
-            let mut entry = entry.map_err(|e| {
-                FileError::Other(Some(
-                    format!("failed to read tar entry for {spec}: {e}").into(),
-                ))
+            let mut entry = entry.map_err(|e| PackageError::ReadEntry {
+                spec: spec.clone(),
+                source: e,
             })?;
 
             if entry.header().entry_type().is_dir() {
                 continue;
             }
 
-            let path = entry.path().map_err(|e| {
-                FileError::Other(Some(format!("invalid path in {spec}: {e}").into()))
+            let path = entry.path().map_err(|e| PackageError::InvalidPath {
+                spec: spec.clone(),
+                source: e,
             })?;
 
             let path_str = path.to_string_lossy().replace('\\', "/");
             let path_clean = path_str.trim_start_matches("./").to_string();
 
             let mut data = Vec::new();
-            entry.read_to_end(&mut data).map_err(|e| {
-                FileError::Other(Some(
-                    format!("failed to read file {path_clean} from {spec}: {e}").into(),
-                ))
-            })?;
+            entry
+                .read_to_end(&mut data)
+                .map_err(|e| PackageError::ReadFile {
+                    path: path_clean.clone(),
+                    spec: spec.clone(),
+                    source: e,
+                })?;
 
             if path_clean == "typst.toml" {
                 root_prefix = Some(String::new());
@@ -180,9 +239,10 @@ impl PackageResolver {
 
         // 1. Check cache
         {
-            let cache = self.cache.read().map_err(|e| {
-                FileError::Other(Some(format!("package cache lock error: {e}").into()))
-            })?;
+            let cache = self
+                .cache
+                .read()
+                .map_err(|e| PackageError::Lock(e.to_string()))?;
             if let Some(pkg_files) = cache.get(spec) {
                 return pkg_files
                     .get(&key)
@@ -193,9 +253,7 @@ impl PackageResolver {
 
         // 2. Not cached: try on-demand download if allowed
         if !self.allow_packages {
-            return Err(FileError::Other(Some(
-                format!("package resolution is disabled; cannot download {spec}").into(),
-            )));
+            return Err(PackageError::Disabled(spec.clone()).into());
         }
 
         self.resolve_package(spec)?;
@@ -204,12 +262,10 @@ impl PackageResolver {
         let cache = self
             .cache
             .read()
-            .map_err(|e| FileError::Other(Some(format!("package cache lock error: {e}").into())))?;
-        let pkg_files = cache.get(spec).ok_or_else(|| {
-            FileError::Other(Some(
-                format!("package {spec} not found in cache after download").into(),
-            ))
-        })?;
+            .map_err(|e| PackageError::Lock(e.to_string()))?;
+        let pkg_files = cache
+            .get(spec)
+            .ok_or_else(|| PackageError::NotFound(spec.clone()))?;
 
         pkg_files
             .get(&key)

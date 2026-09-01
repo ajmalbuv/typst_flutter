@@ -10,24 +10,18 @@ use typst::{Library, LibraryExt};
 use crate::api::typst::{TypstCompileError, VirtualFile};
 use crate::package::PackageResolver;
 
-/// In-memory Typst World implementation.
-pub(crate) struct SimpleWorld {
-    pub(crate) library: LazyHash<Library>,
-    pub(crate) book: LazyHash<FontBook>,
-    pub(crate) fonts: Vec<Font>,
-    pub(crate) source: Source,
-    /// Virtual file system: normalised path string -> file bytes.
-    pub(crate) files: HashMap<String, Bytes>,
-    pub(crate) sys_time: Option<i64>,
-    /// Package resolution subsystem.
-    pub(crate) package_resolver: PackageResolver,
+// ── FontManager ─────────────────────────────────────────────────────────────
+
+/// Manages embedded default fonts and dynamically registered user fonts.
+pub(crate) struct FontManager {
+    book: LazyHash<FontBook>,
+    fonts: Vec<Font>,
 }
 
-impl SimpleWorld {
+impl FontManager {
     pub(crate) fn new() -> Self {
         let mut fonts = Vec::new();
 
-        // Bundled core fonts
         let bundled = [
             include_bytes!("../../assets/fonts/LibertinusSerif-Regular.otf").as_slice(),
             include_bytes!("../../assets/fonts/NewCMMath-Book.otf").as_slice(),
@@ -39,24 +33,9 @@ impl SimpleWorld {
         }
 
         Self {
-            library: LazyHash::new(Library::builder().build()),
             book: LazyHash::new(FontBook::from_fonts(&fonts)),
             fonts,
-            source: Source::new(
-                FileId::new(RootedPath::new(
-                    VirtualRoot::Project,
-                    VirtualPath::new("main.typ").unwrap(),
-                )),
-                "".into(),
-            ),
-            files: HashMap::new(),
-            sys_time: None,
-            package_resolver: PackageResolver::new(),
         }
-    }
-
-    pub(crate) fn set_allow_packages(&mut self, allow: bool) {
-        self.package_resolver.set_allow_packages(allow);
     }
 
     pub(crate) fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
@@ -67,16 +46,36 @@ impl SimpleWorld {
         self.book = LazyHash::new(FontBook::from_fonts(&self.fonts));
     }
 
-    pub(crate) fn set_markup(&mut self, markup: String) {
-        if self.source.text() != markup {
-            self.source = Source::new(self.source.id(), markup);
+    pub(crate) fn book(&self) -> &LazyHash<FontBook> {
+        &self.book
+    }
+
+    pub(crate) fn font(&self, index: usize) -> Option<Font> {
+        self.fonts.get(index).cloned()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn font_count(&self) -> usize {
+        self.fonts.len()
+    }
+}
+
+// ── VirtualFileSystem ───────────────────────────────────────────────────────
+
+/// In-memory project virtual file system. Normalises paths and caches file bytes.
+#[derive(Default)]
+pub(crate) struct VirtualFileSystem {
+    files: HashMap<String, Bytes>,
+}
+
+impl VirtualFileSystem {
+    pub(crate) fn new() -> Self {
+        Self {
+            files: HashMap::new(),
         }
     }
 
-    /// Replaces the entire virtual file system for the next compilation.
-    ///
-    /// The VFS is reset on every call so that stale files from a previous
-    /// compilation do not bleed into the next one.
+    /// Replaces project files, skipping byte-identical entries to preserve downstream cache.
     pub(crate) fn set_files(&mut self, virtual_files: Vec<VirtualFile>) {
         let mut new_keys = std::collections::HashSet::new();
         for vf in virtual_files {
@@ -89,11 +88,83 @@ impl SimpleWorld {
                 .get(&normalised)
                 .is_some_and(|existing| existing.as_slice() == new_bytes.as_slice())
             {
-                continue; // Skip if bytes are identical to preserve cache
+                continue;
             }
             self.files.insert(normalised, new_bytes);
         }
         self.files.retain(|k, _| new_keys.contains(k));
+    }
+
+    pub(crate) fn get(&self, path: &str) -> Option<&Bytes> {
+        self.files.get(path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contains(&self, path: &str) -> bool {
+        self.files.contains_key(path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.files.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
+    pub(crate) fn files(&self) -> &HashMap<String, Bytes> {
+        &self.files
+    }
+}
+
+// ── SimpleWorld ─────────────────────────────────────────────────────────────
+
+/// In-memory Typst World coordinator.
+pub(crate) struct SimpleWorld {
+    pub(crate) library: LazyHash<Library>,
+    pub(crate) font_manager: FontManager,
+    pub(crate) source: Source,
+    pub(crate) vfs: VirtualFileSystem,
+    pub(crate) sys_time: Option<i64>,
+    pub(crate) package_resolver: PackageResolver,
+}
+
+impl SimpleWorld {
+    pub(crate) fn new() -> Self {
+        Self {
+            library: LazyHash::new(Library::builder().build()),
+            font_manager: FontManager::new(),
+            source: Source::new(
+                FileId::new(RootedPath::new(
+                    VirtualRoot::Project,
+                    VirtualPath::new("main.typ").unwrap(),
+                )),
+                "".into(),
+            ),
+            vfs: VirtualFileSystem::new(),
+            sys_time: None,
+            package_resolver: PackageResolver::new(),
+        }
+    }
+
+    pub(crate) fn set_allow_packages(&mut self, allow: bool) {
+        self.package_resolver.set_allow_packages(allow);
+    }
+
+    pub(crate) fn add_fonts(&mut self, font_data: Vec<Vec<u8>>) {
+        self.font_manager.add_fonts(font_data);
+    }
+
+    pub(crate) fn set_markup(&mut self, markup: String) {
+        if self.source.text() != markup {
+            self.source = Source::new(self.source.id(), markup);
+        }
+    }
+
+    pub(crate) fn set_files(&mut self, virtual_files: Vec<VirtualFile>) {
+        self.vfs.set_files(virtual_files);
     }
 
     pub(crate) fn set_sys_time(&mut self, sys_time: Option<i64>) {
@@ -112,7 +183,7 @@ impl SimpleWorld {
 
     pub(crate) fn pre_resolve_packages(&mut self) -> Result<(), TypstCompileError> {
         let source_text = self.source.text().to_string();
-        let files = self.files.clone();
+        let files = self.vfs.files().clone();
         self.package_resolver
             .pre_resolve_packages(&source_text, &files)
     }
@@ -124,7 +195,7 @@ impl typst::World for SimpleWorld {
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
-        &self.book
+        self.font_manager.book()
     }
 
     fn main(&self) -> FileId {
@@ -141,7 +212,7 @@ impl typst::World for SimpleWorld {
             VirtualRoot::Project => {
                 let vpath = id.vpath();
                 let key = vpath.get_without_slash().replace('\\', "/");
-                match self.files.get(&key) {
+                match self.vfs.get(&key) {
                     Some(bytes) => {
                         let text =
                             std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
@@ -161,7 +232,7 @@ impl typst::World for SimpleWorld {
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.get(index).cloned()
+        self.font_manager.font(index)
     }
 
     fn file(&self, id: FileId) -> Result<Bytes, FileError> {
@@ -169,7 +240,7 @@ impl typst::World for SimpleWorld {
             VirtualRoot::Project => {
                 let vpath = id.vpath();
                 let key = vpath.get_without_slash().replace('\\', "/");
-                self.files
+                self.vfs
                     .get(&key)
                     .cloned()
                     .ok_or_else(|| FileError::NotFound(vpath.get_without_slash().into()))
@@ -207,7 +278,7 @@ mod tests {
     fn test_world_initialization_bundled_fonts() {
         let world = SimpleWorld::new();
         // Check that bundled fonts are loaded
-        assert!(world.fonts.len() >= 3);
+        assert!(world.font_manager.font_count() >= 3);
     }
 
     #[test]
@@ -219,9 +290,9 @@ mod tests {
         }];
         world.set_files(files);
         // Backslashes should be normalized to forward slashes
-        assert!(world.files.contains_key("subdir/test.typ"));
+        assert!(world.vfs.contains("subdir/test.typ"));
         assert_eq!(
-            world.files.get("subdir/test.typ").unwrap().as_slice(),
+            world.vfs.get("subdir/test.typ").unwrap().as_slice(),
             b"= Test"
         );
     }
@@ -327,17 +398,17 @@ mod tests {
             path: "temp.txt".to_string(),
             bytes: vec![1, 2, 3],
         }]);
-        assert_eq!(world.files.len(), 1);
+        assert_eq!(world.vfs.len(), 1);
         world.set_files(vec![]);
-        assert!(world.files.is_empty());
+        assert!(world.vfs.is_empty());
 
         // set_inputs with None
         world.set_inputs(None);
 
         // add_fonts
-        let initial_len = world.fonts.len();
+        let initial_len = world.font_manager.font_count();
         world.add_fonts(vec![]);
-        assert_eq!(world.fonts.len(), initial_len);
+        assert_eq!(world.font_manager.font_count(), initial_len);
     }
 
     #[test]

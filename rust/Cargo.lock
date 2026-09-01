@@ -3088,6 +3088,7 @@ dependencies = [
  "flutter_rust_bridge",
  "serde_json",
  "tar",
+ "thiserror",
  "time",
  "typst",
  "typst-eval",

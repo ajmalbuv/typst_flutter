@@ -24,6 +24,7 @@ time = "0.3.47"
 ureq = "3"
 flate2 = "1"
 tar = "0.4"
+thiserror = "2"
 
 [profile.release]
 opt-level = "z"      # optimise for binary size
