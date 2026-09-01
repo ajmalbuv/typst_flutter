@@ -52,7 +52,7 @@ jobs:
         uses: actions-rust-lang/audit@v1
         with:
           workingDirectory: rust
-          ignore: "RUSTSEC-2026-0194, RUSTSEC-2026-0195"
+          ignore: "RUSTSEC-2026-0194,RUSTSEC-2026-0195"
 
   dart-test:
     strategy:

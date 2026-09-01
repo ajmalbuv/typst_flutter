@@ -1468,4 +1468,57 @@ mod tests {
         let missing_diag_span = DiagSpan::from_range(missing_id, 0..1);
         assert!(resolve_span(missing_diag_span, &world).is_none());
     }
+
+    #[test]
+    fn test_package_download_live_and_compile() {
+        let mut engine = TypstEngine::new();
+        let result = engine.compile(
+            r#"#import "@preview/cetz:0.3.4": canvas, draw
+#canvas({
+  draw.line((0, 0), (1, 1))
+})"#
+            .to_string(),
+            vec![],
+            None,
+            None,
+            true,
+        );
+        assert!(result.is_ok(), "Package compile failed: {:?}", result.err());
+        let doc = result.unwrap();
+        assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
+    fn test_package_download_failure_and_on_demand() {
+        let mut engine = TypstEngine::new();
+        // 1. Trigger failure in pre_resolve_packages
+        let result = engine.compile(
+            r#"#import "@preview/non-existent-pkg-404-xyz:0.0.1": *"#.to_string(),
+            vec![],
+            None,
+            None,
+            true,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.diagnostics[0]
+                .message
+                .contains("Failed to resolve package")
+        );
+
+        // 2. Trigger resolve_package_file on-demand when not cached
+        let world = SimpleWorld::new();
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "cetz".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 0,
+                minor: 3,
+                patch: 4,
+            },
+        };
+        let file_res = world.resolve_package_file(&spec, &VirtualPath::new("typst.toml").unwrap());
+        assert!(file_res.is_ok());
+    }
 }
