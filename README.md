@@ -27,6 +27,7 @@ Compile Typst markup to high-quality PDF documents or rendered images on Android
 - **Widgets Included:** Drop-in `TypstDocumentViewer` and `TypstView` widgets for instant live previews with Raster or SVG support.
 - **Structured Error Handling:** Get detailed `TypstDiagnostic` error lines when Typst compilation fails, perfect for building in-app editors.
 - **Virtual File System & Inputs:** Pass Flutter assets, raw memory bytes, and `sys.inputs` dictionaries directly into the Typst compiler.
+- **Typst Package Registry:** Full support for `#import "@preview/..."` with automatic downloading, decompression, and in-memory caching.
 
 ## Getting started
 
@@ -34,7 +35,7 @@ Add the package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  typst_flutter: ^2.0.0
+  typst_flutter: ^3.0.0
 ```
 
 Then fetch dependencies and run the **required** one-time setup:
