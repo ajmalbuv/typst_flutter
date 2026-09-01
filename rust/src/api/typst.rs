@@ -961,6 +961,18 @@ mod tests {
     }
 
     #[test]
+    fn test_query_invalid_selector_cast() {
+        let mut engine = TypstEngine::new();
+        let doc = engine
+            .compile("= Heading".to_string(), vec![], None, None, true)
+            .unwrap();
+        // Evaluates to an integer (not a LocatableSelector)
+        let err = engine.query(&doc, "1 + 1".to_string());
+        assert!(err.is_err());
+        assert!(err.unwrap_err().contains("Invalid selector"));
+    }
+
+    #[test]
     fn test_export_svg_out_of_bounds() {
         let mut engine = TypstEngine::new();
         let doc = engine
@@ -1038,6 +1050,17 @@ mod tests {
         assert_eq!(today.year(), Some(2021));
         assert_eq!(today.month(), Some(1));
         assert_eq!(today.day(), Some(1));
+
+        // With offset
+        let d1 = Datetime::from_ymd(2021, 1, 2).unwrap();
+        let d0 = Datetime::from_ymd(2021, 1, 1).unwrap();
+        let offset = (d1 - d0).unwrap();
+        let today_offset = world.today(Some(offset)).unwrap();
+        assert_eq!(today_offset.day(), Some(2));
+
+        // System time fallback
+        let world_default_time = SimpleWorld::new();
+        assert!(world_default_time.today(None).is_some());
     }
 
     #[test]
@@ -1065,21 +1088,22 @@ mod tests {
     fn test_package_spec_parsing_edge_cases() {
         let world = SimpleWorld::new();
 
-        // Invalid: no version
         let mut specs = Vec::new();
         world.collect_package_specs(r#"#import "@preview/pkg""#, &mut specs);
         assert!(specs.is_empty());
 
-        // Invalid: partial version
         let mut specs = Vec::new();
         world.collect_package_specs(r#"#import "@preview/pkg:1.2""#, &mut specs);
         assert!(specs.is_empty());
 
-        // Valid: in string context
         let mut specs = Vec::new();
         world.collect_package_specs(r#"@preview/valid_name-2:1.0.0"#, &mut specs);
         assert_eq!(specs.len(), 1);
         assert_eq!(specs[0].name.as_str(), "valid_name-2");
+
+        let mut specs = Vec::new();
+        world.collect_package_specs(r#"@ invalid @/foo:1.0.0 @preview/:1.0.0 @preview/pkg:1.0.0.0 @preview/pkg:a.b.c @preview/pkg:1.b.0 @preview/pkg:1.0.c"#, &mut specs);
+        assert!(specs.is_empty());
     }
 
     #[test]
@@ -1096,27 +1120,281 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Run with: cargo test -- --ignored
-    fn test_package_download_and_compile() {
+    fn test_package_in_memory_cache_and_resolution() {
+        use typst::World;
         let mut engine = TypstEngine::new();
-        let result = engine.compile(
-            r#"#import "@preview/cetz:0.3.4": canvas, draw
-#canvas({
-  draw.line((0, 0), (1, 1))
-})"#
-            .to_string(),
-            vec![],
-            None,
-            None,
-            true,
+
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "testpkg".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+
+        let mut files = HashMap::new();
+        files.insert(
+            "typst.toml".to_string(),
+            Bytes::new(
+                b"[package]\nname = \"testpkg\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\""
+                    .to_vec(),
+            ),
         );
+        files.insert(
+            "lib.typ".to_string(),
+            Bytes::new(b"#let hello() = [Package Hello]".to_vec()),
+        );
+        files.insert(
+            "logo.png".to_string(),
+            Bytes::new(b"fake_logo_bytes".to_vec()),
+        );
+        files.insert("bad.typ".to_string(), Bytes::new(vec![0xFF, 0xFE]));
+
+        engine
+            .world
+            .package_cache
+            .write()
+            .unwrap()
+            .insert(spec.clone(), files);
+
+        // 1. resolve_package hitting fast cache path
+        assert!(engine.world.resolve_package(&spec).is_ok());
+
+        // 2. resolve_package_file
+        let lib_vpath = VirtualPath::new("lib.typ").unwrap();
+        let lib_bytes = engine
+            .world
+            .resolve_package_file(&spec, &lib_vpath)
+            .unwrap();
+        assert_eq!(lib_bytes.as_slice(), b"#let hello() = [Package Hello]");
+
+        let missing_vpath = VirtualPath::new("missing.typ").unwrap();
         assert!(
-            result.is_ok(),
-            "Failed to compile with package: {:?}",
-            result.err()
+            engine
+                .world
+                .resolve_package_file(&spec, &missing_vpath)
+                .is_err()
         );
-        let doc = result.unwrap();
+
+        // 3. source() and file() through VirtualRoot::Package
+        let pkg_lib_id = FileId::new(RootedPath::new(
+            VirtualRoot::Package(spec.clone()),
+            lib_vpath,
+        ));
+        let src = engine.world.source(pkg_lib_id).unwrap();
+        assert_eq!(src.text(), "#let hello() = [Package Hello]");
+
+        let pkg_logo_id = FileId::new(RootedPath::new(
+            VirtualRoot::Package(spec.clone()),
+            VirtualPath::new("logo.png").unwrap(),
+        ));
+        let logo_bytes = engine.world.file(pkg_logo_id).unwrap();
+        assert_eq!(logo_bytes.as_slice(), b"fake_logo_bytes");
+
+        let pkg_bad_id = FileId::new(RootedPath::new(
+            VirtualRoot::Package(spec.clone()),
+            VirtualPath::new("bad.typ").unwrap(),
+        ));
+        assert!(engine.world.source(pkg_bad_id).is_err());
+
+        // 4. Full compilation using cached package
+        let doc = engine
+            .compile(
+                r#"#import "@preview/testpkg:1.0.0": hello; #hello()"#.to_string(),
+                vec![],
+                None,
+                None,
+                true,
+            )
+            .unwrap();
         assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
+    fn test_package_transitive_and_vfs_scan() {
+        let mut engine = TypstEngine::new();
+
+        let spec_a = PackageSpec {
+            namespace: "preview".into(),
+            name: "pkg-a".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+        let spec_b = PackageSpec {
+            namespace: "preview".into(),
+            name: "pkg-b".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+
+        let mut files_a = HashMap::new();
+        files_a.insert(
+            "typst.toml".to_string(),
+            Bytes::new(
+                b"[package]\nname = \"pkg-a\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\""
+                    .to_vec(),
+            ),
+        );
+        files_a.insert(
+            "lib.typ".to_string(),
+            Bytes::new(b"#import \"@preview/pkg-b:1.0.0\": val_b\n#let val_a = val_b".to_vec()),
+        );
+
+        let mut files_b = HashMap::new();
+        files_b.insert(
+            "typst.toml".to_string(),
+            Bytes::new(
+                b"[package]\nname = \"pkg-b\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\""
+                    .to_vec(),
+            ),
+        );
+        files_b.insert(
+            "lib.typ".to_string(),
+            Bytes::new(b"#let val_b = [Transitive Value]".to_vec()),
+        );
+
+        {
+            let mut cache = engine.world.package_cache.write().unwrap();
+            cache.insert(spec_a.clone(), files_a);
+            cache.insert(spec_b.clone(), files_b);
+        }
+
+        // Put a .typ file in VFS that also references pkg-a
+        let vfs_files = vec![VirtualFile {
+            path: "helper.typ".to_string(),
+            bytes: b"#import \"@preview/pkg-a:1.0.0\": val_a".to_vec(),
+        }];
+
+        let doc = engine
+            .compile(
+                r#"#include "helper.typ""#.to_string(),
+                vfs_files,
+                None,
+                None,
+                true,
+            )
+            .unwrap();
+        assert_eq!(doc.page_count(), 1);
+    }
+
+    #[test]
+    fn test_package_resolution_errors_and_edge_cases() {
+        let mut world = SimpleWorld::new();
+
+        // 1. Unsupported namespace
+        let local_spec = PackageSpec {
+            namespace: "local".into(),
+            name: "pkg".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+        assert!(world.resolve_package(&local_spec).is_err());
+        assert!(
+            world
+                .resolve_package_file(&local_spec, &VirtualPath::new("lib.typ").unwrap())
+                .is_err()
+        );
+
+        // 2. Disabled packages
+        world.set_allow_packages(false);
+        let preview_spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "pkg".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+        assert!(world.resolve_package(&preview_spec).is_err());
+        assert!(
+            world
+                .resolve_package_file(&preview_spec, &VirtualPath::new("lib.typ").unwrap())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_simple_world_methods_and_derives() {
+        use typst::World;
+        let mut world = SimpleWorld::new();
+
+        let _ = world.library();
+        let _ = world.book();
+        assert_eq!(world.main(), world.source.id());
+        assert!(world.font(0).is_some());
+        assert!(world.font(999_999).is_none());
+
+        // set_markup with identical text (hits no-op branch)
+        world.set_markup("identical".to_string());
+        world.set_markup("identical".to_string());
+
+        // set_files with cleanup
+        world.set_files(vec![VirtualFile {
+            path: "temp.txt".to_string(),
+            bytes: vec![1, 2, 3],
+        }]);
+        assert_eq!(world.files.len(), 1);
+        world.set_files(vec![]);
+        assert!(world.files.is_empty());
+
+        // set_inputs with None
+        world.set_inputs(None);
+
+        // Version string
+        assert!(!get_typst_version().is_empty());
+
+        // Derives & Debug formatting
+        let vf = VirtualFile {
+            path: "test.txt".to_string(),
+            bytes: vec![1],
+        };
+        let _ = format!("{vf:?} {:?}", vf.clone());
+
+        let rr = RenderResult {
+            bytes: vec![0, 0, 0, 255],
+            width: 1,
+            height: 1,
+        };
+        let _ = format!("{rr:?} {:?}", rr.clone());
+
+        let pi = PageInfo {
+            width_pt: 100.0,
+            height_pt: 200.0,
+        };
+        let _ = format!("{pi:?} {:?}", pi.clone());
+
+        assert_eq!(TypstSeverity::Error, TypstSeverity::Error);
+        assert_ne!(TypstSeverity::Error, TypstSeverity::Warning);
+        let _ = format!("{:?} {:?}", TypstSeverity::Error, TypstSeverity::Warning);
+
+        let loc = TypstSourceLocation { line: 1, column: 1 };
+        let _ = format!("{loc:?} {:?}", loc.clone());
+
+        let diag = TypstDiagnostic {
+            severity: TypstSeverity::Warning,
+            message: "warn".to_string(),
+            hints: vec!["hint".to_string()],
+            span_start: Some(loc.clone()),
+            span_end: Some(loc),
+        };
+        let _ = format!("{diag:?} {:?}", diag.clone());
+
+        let err = TypstCompileError {
+            diagnostics: vec![diag],
+        };
+        let _ = format!("{err:?} {:?}", err.clone());
     }
 
     #[test]
@@ -1136,12 +1414,11 @@ mod tests {
         let doc = engine.compile(markup, vec![], None, None, true).unwrap();
         let _warnings = doc.warnings();
 
-        // 1. Cover query evaluate selector error (lines 245-251)
+        // 1. Cover query evaluate selector error
         let query_err = engine.query(&doc, "<invalid> syntax".to_string());
         assert!(query_err.is_err());
 
         // 2. Cover DiagSpanKind::Range or Detached
-        // We can just construct a SourceDiagnostic and map it directly
         use typst::diag::SourceDiagnostic;
         use typst::syntax::Span;
         let diag = SourceDiagnostic::error(Span::detached(), "Detached error");
@@ -1182,5 +1459,13 @@ mod tests {
         let diag_span = DiagSpan::from_range(id, 0..1);
         let res = resolve_span(diag_span, &world);
         assert!(res.is_some());
+
+        // Span on non-existent file
+        let missing_id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new("non_existent.typ").unwrap(),
+        ));
+        let missing_diag_span = DiagSpan::from_range(missing_id, 0..1);
+        assert!(resolve_span(missing_diag_span, &world).is_none());
     }
 }
