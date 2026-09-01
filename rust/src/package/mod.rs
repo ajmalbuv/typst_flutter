@@ -63,9 +63,6 @@ pub(crate) enum PackageError {
         #[source]
         source: std::io::Error,
     },
-
-    #[error("package {0} not found in cache after download")]
-    NotFound(PackageSpec),
 }
 
 impl From<PackageError> for FileError {
@@ -97,20 +94,19 @@ impl PackageResolver {
     }
 
     /// Downloads and caches a Typst package from the official registry.
-    ///
-    /// Fetches https://packages.typst.org/{namespace}/{name}-{version}.tar.gz,
-    /// decompresses it, and stores all files in self.cache.
-    ///
-    /// No-ops if the package is already cached.
-    pub(crate) fn resolve_package(&self, spec: &PackageSpec) -> Result<(), FileError> {
+    /// Ensures a package is downloaded, unpacked, and cached, returning a clone of its virtual files.
+    pub(crate) fn ensure_package(
+        &self,
+        spec: &PackageSpec,
+    ) -> Result<HashMap<String, Bytes>, FileError> {
         // Fast path: already cached
         {
             let cache = self
                 .cache
                 .read()
                 .map_err(|e| PackageError::Lock(e.to_string()))?;
-            if cache.contains_key(spec) {
-                return Ok(());
+            if let Some(files) = cache.get(spec) {
+                return Ok(files.clone());
             }
         }
 
@@ -150,8 +146,19 @@ impl PackageResolver {
             .cache
             .write()
             .map_err(|e| PackageError::Lock(e.to_string()))?;
-        cache.insert(spec.clone(), files);
-        Ok(())
+        cache.insert(spec.clone(), files.clone());
+        Ok(files)
+    }
+
+    /// Downloads and caches a Typst package from the official registry.
+    ///
+    /// Fetches https://packages.typst.org/{namespace}/{name}-{version}.tar.gz,
+    /// decompresses it, and stores all files in self.cache.
+    ///
+    /// No-ops if the package is already cached.
+    #[cfg(test)]
+    pub(crate) fn resolve_package(&self, spec: &PackageSpec) -> Result<(), FileError> {
+        self.ensure_package(spec).map(|_| ())
     }
 
     /// Decompresses and extracts a package tar.gz archive in memory.
@@ -251,23 +258,9 @@ impl PackageResolver {
             }
         }
 
-        // 2. Not cached: try on-demand download if allowed
-        if !self.allow_packages {
-            return Err(PackageError::Disabled(spec.clone()).into());
-        }
-
-        self.resolve_package(spec)?;
-
-        // 3. Read from cache after download
-        let cache = self
-            .cache
-            .read()
-            .map_err(|e| PackageError::Lock(e.to_string()))?;
-        let pkg_files = cache
-            .get(spec)
-            .ok_or_else(|| PackageError::NotFound(spec.clone()))?;
-
-        pkg_files
+        // 2. Not cached: download and extract
+        let files = self.ensure_package(spec)?;
+        files
             .get(&key)
             .cloned()
             .ok_or_else(|| FileError::NotFound(format!("{spec}/{key}").into()))
@@ -303,7 +296,7 @@ impl PackageResolver {
                 continue;
             }
 
-            self.resolve_package(&spec).map_err(|e| TypstCompileError {
+            let pkg_files = self.ensure_package(&spec).map_err(|e| TypstCompileError {
                 diagnostics: vec![TypstDiagnostic {
                     severity: TypstSeverity::Error,
                     message: format!("Failed to resolve package {spec}: {e}"),
@@ -316,27 +309,15 @@ impl PackageResolver {
             resolved.insert(spec.clone());
 
             // Scan newly downloaded package files for transitive deps
-            let cache = self.cache.read().map_err(|e| TypstCompileError {
-                diagnostics: vec![TypstDiagnostic {
-                    severity: TypstSeverity::Error,
-                    message: format!("Lock error reading package cache: {e}"),
-                    hints: vec![],
-                    span_start: None,
-                    span_end: None,
-                }],
-            })?;
-
-            if let Some(pkg_files) = cache.get(&spec) {
-                for (path, bytes) in pkg_files {
-                    if path.ends_with(".typ")
-                        && let Ok(text) = std::str::from_utf8(bytes)
-                    {
-                        let mut transitive = Vec::new();
-                        self.collect_package_specs(text, &mut transitive);
-                        for ts in transitive {
-                            if !resolved.contains(&ts) {
-                                queue.push_back(ts);
-                            }
+            for (path, bytes) in &pkg_files {
+                if path.ends_with(".typ")
+                    && let Ok(text) = std::str::from_utf8(bytes)
+                {
+                    let mut transitive = Vec::new();
+                    self.collect_package_specs(text, &mut transitive);
+                    for ts in transitive {
+                        if !resolved.contains(&ts) {
+                            queue.push_back(ts);
                         }
                     }
                 }
@@ -805,7 +786,6 @@ mod tests {
                 spec: spec.clone(),
                 source: std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"),
             },
-            PackageError::NotFound(spec.clone()),
         ];
 
         for err in errs {
