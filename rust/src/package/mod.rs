@@ -691,4 +691,128 @@ mod tests {
         let files2 = PackageResolver::unpack_package_archive(&gz2_bytes, &spec).unwrap();
         assert!(files2.contains_key("file.txt"));
     }
+
+    #[test]
+    fn test_package_resolver_lock_poisoning() {
+        let resolver = PackageResolver::new();
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "test".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+
+        // Poison the lock intentionally via panic
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = resolver.cache.write().unwrap();
+            panic!("intentional lock poison");
+        }));
+
+        assert!(resolver.resolve_package(&spec).is_err());
+        assert!(
+            resolver
+                .resolve_package_file(&spec, &VirtualPath::new("lib.typ").unwrap())
+                .is_err()
+        );
+
+        let mut mut_resolver = resolver;
+        let vfs = HashMap::new();
+        assert!(
+            mut_resolver
+                .pre_resolve_packages(r#"#import "@preview/test:1.0.0": *"#, &vfs)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_pre_resolve_packages_duplicate_and_vfs_typ() {
+        let mut resolver = PackageResolver::new();
+        let mut vfs = HashMap::new();
+        vfs.insert(
+            "sub.typ".to_string(),
+            Bytes::new(b"#import \"@preview/cetz:0.3.4\": *".to_vec()),
+        );
+        // Duplicate imports in main source and VFS to hit queue dedup branch
+        let res = resolver.pre_resolve_packages(
+            r#"#import "@preview/cetz:0.3.4": *
+               #import "@preview/cetz:0.3.4": *"#,
+            &vfs,
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_unpack_package_archive_corrupted_entries() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use std::io::Write;
+
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "corrupt".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+
+        // Valid gzip, invalid tar stream -> hits archive entry reading error branch
+        let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+        gz.write_all(b"invalid tar header data that fails tar parsing")
+            .unwrap();
+        let gz_bytes = gz.finish().unwrap();
+        assert!(PackageResolver::unpack_package_archive(&gz_bytes, &spec).is_err());
+    }
+
+    #[test]
+    fn test_package_error_display_coverage() {
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "test".into(),
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+
+        let errs: Vec<PackageError> = vec![
+            PackageError::Lock("poisoned".into()),
+            PackageError::Disabled(spec.clone()),
+            PackageError::UnsupportedNamespace("local".into()),
+            PackageError::ReadBody {
+                spec: spec.clone(),
+                source: std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"),
+            },
+            PackageError::ReadArchive {
+                spec: spec.clone(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid tar"),
+            },
+            PackageError::ReadEntry {
+                spec: spec.clone(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, "bad entry"),
+            },
+            PackageError::InvalidPath {
+                spec: spec.clone(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, "bad path"),
+            },
+            PackageError::ReadFile {
+                path: "file.typ".into(),
+                spec: spec.clone(),
+                source: std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"),
+            },
+            PackageError::NotFound(spec.clone()),
+        ];
+
+        for err in errs {
+            let msg = err.to_string();
+            assert!(!msg.is_empty());
+            let file_err: typst::diag::FileError = err.into();
+            assert!(matches!(file_err, typst::diag::FileError::Other(_)));
+        }
+    }
 }
