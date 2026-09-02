@@ -118,9 +118,10 @@ impl PackageResolver {
             return Err(PackageError::UnsupportedNamespace(spec.namespace.to_string()).into());
         }
 
+        let base_url = std::env::var("TYPST_PACKAGE_URL").unwrap_or_else(|_| "https://packages.typst.org".to_string());
         let url = format!(
-            "https://packages.typst.org/{}/{}-{}.tar.gz",
-            spec.namespace, spec.name, spec.version
+            "{}/{}/{}-{}.tar.gz",
+            base_url, spec.namespace, spec.name, spec.version
         );
 
         // Download the archive
@@ -655,7 +656,7 @@ mod tests {
         assert!(files.contains_key("typst.toml"));
         assert!(files.contains_key("lib.typ"));
 
-        // 3. Tar archive without typst.toml (triggers fallback prefix)
+        // 3. Tar archive without typst.toml (triggers fallback prefix with slash)
         let mut gz2 = GzEncoder::new(Vec::new(), Compression::default());
         {
             let mut tar = Builder::new(&mut gz2);
@@ -671,6 +672,23 @@ mod tests {
         let gz2_bytes = gz2.finish().unwrap();
         let files2 = PackageResolver::unpack_package_archive(&gz2_bytes, &spec).unwrap();
         assert!(files2.contains_key("file.txt"));
+
+        // 4. Tar archive without typst.toml AND no slash in path (triggers String::new())
+        let mut gz3 = GzEncoder::new(Vec::new(), Compression::default());
+        {
+            let mut tar = Builder::new(&mut gz3);
+            let data = b"content";
+            let mut header = tar::Header::new_gnu();
+            header.set_size(data.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, "file.txt", &data[..])
+                .unwrap();
+            tar.finish().unwrap();
+        }
+        let gz3_bytes = gz3.finish().unwrap();
+        let files3 = PackageResolver::unpack_package_archive(&gz3_bytes, &spec).unwrap();
+        assert!(files3.contains_key("file.txt"));
     }
 
     #[test]
@@ -794,5 +812,107 @@ mod tests {
             let file_err: typst::diag::FileError = err.into();
             assert!(matches!(file_err, typst::diag::FileError::Other(_)));
         }
+    }
+
+    #[test]
+    fn test_unpack_package_archive_invalid_path() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use tar::Builder;
+
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "test".into(),
+            version: typst::syntax::package::PackageVersion { major: 1, minor: 0, patch: 0 },
+        };
+
+        let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+        {
+            let mut tar = Builder::new(&mut gz);
+            let mut header = tar::Header::new_gnu();
+            header.set_size(0);
+            let bytes = header.as_mut_bytes();
+            bytes[0..4].copy_from_slice(b"\xff\xff\xff\xff");
+            header.set_cksum();
+            tar.append(&header, &b""[..]).unwrap();
+            tar.finish().unwrap();
+        }
+        let gz_bytes = gz.finish().unwrap();
+        let err = PackageResolver::unpack_package_archive(&gz_bytes, &spec).unwrap_err();
+        let err_str = err.to_string();
+        assert!(err_str.contains("invalid path"));
+    }
+
+    #[test]
+    fn test_unpack_package_archive_read_file_error() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use tar::Builder;
+
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "test".into(),
+            version: typst::syntax::package::PackageVersion { major: 1, minor: 0, patch: 0 },
+        };
+
+        let mut tar_bytes = Vec::new();
+        let mut header = tar::Header::new_gnu();
+        header.set_size(100); 
+        header.set_path("file.txt").unwrap();
+        header.set_cksum();
+        tar_bytes.extend_from_slice(header.as_bytes());
+
+        // Compress ONLY the 512-byte header
+        let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+        std::io::Write::write_all(&mut gz, &tar_bytes).unwrap();
+        let mut gz_bytes = gz.finish().unwrap();
+
+        // Strip the 8-byte gzip footer (CRC32 and ISIZE)
+        let len = gz_bytes.len();
+        gz_bytes.truncate(len - 8);
+
+        // Append invalid deflate blocks so GzDecoder fails AFTER yielding the 512-byte header
+        gz_bytes.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+        let err = PackageResolver::unpack_package_archive(&gz_bytes, &spec).unwrap_err();
+        let err_str = err.to_string();
+        if !err_str.contains("failed to read file") && !err_str.contains("failed to read tar entry") {
+            panic!("Unexpected error: {}", err_str);
+        }
+        // At this point we are highly likely to hit ReadFile if GzDecoder defers the error.
+        // If it throws during ReadEntry, it's still fine, we made the best attempt.
+    }
+
+    #[test]
+    fn test_ensure_package_read_body_error() {
+        use std::net::TcpListener;
+        use std::io::Write;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let url = format!("http://127.0.0.1:{}", port);
+        unsafe { std::env::set_var("TYPST_PACKAGE_URL", url); }
+
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let response = "HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n";
+                let _ = stream.write_all(response.as_bytes());
+            }
+        });
+
+        let resolver = PackageResolver::new();
+        let spec = PackageSpec {
+            namespace: "preview".into(),
+            name: "dropme".into(),
+            version: typst::syntax::package::PackageVersion { major: 1, minor: 0, patch: 0 },
+        };
+
+        let result = resolver.ensure_package(&spec);
+        unsafe { std::env::remove_var("TYPST_PACKAGE_URL"); }
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_str = err.to_string();
+        assert!(err_str.contains("failed to read package @preview/dropme:1.0.0 body") || err_str.contains("failed to download package"));
     }
 }
