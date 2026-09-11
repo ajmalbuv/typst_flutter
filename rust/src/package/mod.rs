@@ -89,6 +89,7 @@ impl PackageResolver {
         self.allow_packages = allow;
     }
 
+    #[cfg(test)]
     pub(crate) fn set_base_url(&mut self, url: String) {
         self.base_url = Some(url);
     }
