@@ -35,13 +35,6 @@ pub(crate) enum PackageError {
         source: std::io::Error,
     },
 
-    #[error("failed to read tar entries for {spec}: {source}")]
-    ReadArchive {
-        spec: PackageSpec,
-        #[source]
-        source: std::io::Error,
-    },
-
     #[error("failed to read tar entry for {spec}: {source}")]
     ReadEntry {
         spec: PackageSpec,
@@ -79,6 +72,8 @@ pub(crate) struct PackageResolver {
     pub(crate) cache: RwLock<HashMap<PackageSpec, HashMap<String, Bytes>>>,
     /// Whether to allow downloading packages from the registry.
     pub(crate) allow_packages: bool,
+    /// Base URL for the package registry.
+    pub(crate) base_url: Option<String>,
 }
 
 impl PackageResolver {
@@ -86,11 +81,16 @@ impl PackageResolver {
         Self {
             cache: RwLock::new(HashMap::new()),
             allow_packages: true,
+            base_url: None,
         }
     }
 
     pub(crate) fn set_allow_packages(&mut self, allow: bool) {
         self.allow_packages = allow;
+    }
+
+    pub(crate) fn set_base_url(&mut self, url: String) {
+        self.base_url = Some(url);
     }
 
     /// Downloads and caches a Typst package from the official registry.
@@ -118,8 +118,12 @@ impl PackageResolver {
             return Err(PackageError::UnsupportedNamespace(spec.namespace.to_string()).into());
         }
 
-        let base_url = std::env::var("TYPST_PACKAGE_URL")
-            .unwrap_or_else(|_| "https://packages.typst.org".to_string());
+        let env_url = std::env::var("TYPST_PACKAGE_URL").ok();
+        let base_url = self
+            .base_url
+            .as_deref()
+            .or(env_url.as_deref())
+            .unwrap_or("https://packages.typst.org");
         let url = format!(
             "{}/{}/{}-{}.tar.gz",
             base_url, spec.namespace, spec.name, spec.version
@@ -174,10 +178,10 @@ impl PackageResolver {
         let mut raw_entries: Vec<(String, Vec<u8>)> = Vec::new();
         let mut root_prefix: Option<String> = None;
 
-        for entry in archive.entries().map_err(|e| PackageError::ReadArchive {
-            spec: spec.clone(),
-            source: e,
-        })? {
+        for entry in archive
+            .entries()
+            .expect("archive at position 0 is infallible")
+        {
             let mut entry = entry.map_err(|e| PackageError::ReadEntry {
                 spec: spec.clone(),
                 source: e,
@@ -787,10 +791,6 @@ mod tests {
                 spec: spec.clone(),
                 source: std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"),
             },
-            PackageError::ReadArchive {
-                spec: spec.clone(),
-                source: std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid tar"),
-            },
             PackageError::ReadEntry {
                 spec: spec.clone(),
                 source: std::io::Error::new(std::io::ErrorKind::InvalidData, "bad entry"),
@@ -814,7 +814,10 @@ mod tests {
         }
     }
 
+    // On Unix, tar::Entry::path() uses OsStrExt::from_bytes which never fails on arbitrary bytes.
+    // Only Windows rejects non-UTF-8 path bytes when converting to UTF-16.
     #[test]
+    #[cfg(windows)]
     fn test_unpack_package_archive_invalid_path() {
         use flate2::Compression;
         use flate2::write::GzEncoder;
@@ -900,9 +903,6 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let url = format!("http://127.0.0.1:{}", port);
-        unsafe {
-            std::env::set_var("TYPST_PACKAGE_URL", url);
-        }
 
         std::thread::spawn(move || {
             if let Ok((mut stream, _)) = listener.accept() {
@@ -911,7 +911,8 @@ mod tests {
             }
         });
 
-        let resolver = PackageResolver::new();
+        let mut resolver = PackageResolver::new();
+        resolver.set_base_url(url);
         let spec = PackageSpec {
             namespace: "preview".into(),
             name: "dropme".into(),
@@ -923,9 +924,6 @@ mod tests {
         };
 
         let result = resolver.ensure_package(&spec);
-        unsafe {
-            std::env::remove_var("TYPST_PACKAGE_URL");
-        }
 
         assert!(result.is_err());
         let err = result.unwrap_err();
