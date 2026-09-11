@@ -118,7 +118,8 @@ impl PackageResolver {
             return Err(PackageError::UnsupportedNamespace(spec.namespace.to_string()).into());
         }
 
-        let base_url = std::env::var("TYPST_PACKAGE_URL").unwrap_or_else(|_| "https://packages.typst.org".to_string());
+        let base_url = std::env::var("TYPST_PACKAGE_URL")
+            .unwrap_or_else(|_| "https://packages.typst.org".to_string());
         let url = format!(
             "{}/{}/{}-{}.tar.gz",
             base_url, spec.namespace, spec.name, spec.version
@@ -682,8 +683,7 @@ mod tests {
             header.set_size(data.len() as u64);
             header.set_mode(0o644);
             header.set_cksum();
-            tar.append_data(&mut header, "file.txt", &data[..])
-                .unwrap();
+            tar.append_data(&mut header, "file.txt", &data[..]).unwrap();
             tar.finish().unwrap();
         }
         let gz3_bytes = gz3.finish().unwrap();
@@ -823,7 +823,11 @@ mod tests {
         let spec = PackageSpec {
             namespace: "preview".into(),
             name: "test".into(),
-            version: typst::syntax::package::PackageVersion { major: 1, minor: 0, patch: 0 },
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
         };
 
         let mut gz = GzEncoder::new(Vec::new(), Compression::default());
@@ -847,17 +851,20 @@ mod tests {
     fn test_unpack_package_archive_read_file_error() {
         use flate2::Compression;
         use flate2::write::GzEncoder;
-        use tar::Builder;
 
         let spec = PackageSpec {
             namespace: "preview".into(),
             name: "test".into(),
-            version: typst::syntax::package::PackageVersion { major: 1, minor: 0, patch: 0 },
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
         };
 
         let mut tar_bytes = Vec::new();
         let mut header = tar::Header::new_gnu();
-        header.set_size(100); 
+        header.set_size(100);
         header.set_path("file.txt").unwrap();
         header.set_cksum();
         tar_bytes.extend_from_slice(header.as_bytes());
@@ -876,22 +883,26 @@ mod tests {
 
         let err = PackageResolver::unpack_package_archive(&gz_bytes, &spec).unwrap_err();
         let err_str = err.to_string();
-        if !err_str.contains("failed to read file") && !err_str.contains("failed to read tar entry") {
-            panic!("Unexpected error: {}", err_str);
-        }
+        assert!(
+            err_str.contains("failed to read file") || err_str.contains("failed to read tar entry"),
+            "Unexpected error: {}",
+            err_str
+        );
         // At this point we are highly likely to hit ReadFile if GzDecoder defers the error.
         // If it throws during ReadEntry, it's still fine, we made the best attempt.
     }
 
     #[test]
     fn test_ensure_package_read_body_error() {
-        use std::net::TcpListener;
         use std::io::Write;
+        use std::net::TcpListener;
 
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let url = format!("http://127.0.0.1:{}", port);
-        unsafe { std::env::set_var("TYPST_PACKAGE_URL", url); }
+        unsafe {
+            std::env::set_var("TYPST_PACKAGE_URL", url);
+        }
 
         std::thread::spawn(move || {
             if let Ok((mut stream, _)) = listener.accept() {
@@ -904,15 +915,24 @@ mod tests {
         let spec = PackageSpec {
             namespace: "preview".into(),
             name: "dropme".into(),
-            version: typst::syntax::package::PackageVersion { major: 1, minor: 0, patch: 0 },
+            version: typst::syntax::package::PackageVersion {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
         };
 
         let result = resolver.ensure_package(&spec);
-        unsafe { std::env::remove_var("TYPST_PACKAGE_URL"); }
+        unsafe {
+            std::env::remove_var("TYPST_PACKAGE_URL");
+        }
 
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = err.to_string();
-        assert!(err_str.contains("failed to read package @preview/dropme:1.0.0 body") || err_str.contains("failed to download package"));
+        assert!(
+            err_str.contains("failed to read package @preview/dropme:1.0.0 body")
+                || err_str.contains("failed to download package")
+        );
     }
 }
