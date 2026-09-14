@@ -15,6 +15,9 @@ on:
           - linux
           - macos
 
+permissions:
+  contents: read
+
 jobs:
   build-android:
     name: Build Android APK
