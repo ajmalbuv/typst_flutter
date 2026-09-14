@@ -24,9 +24,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install cross
-        uses: houseabsolute/actions-rust-cross@v1
+        uses: taiki-e/install-action@v2
         with:
-          command: "version"
+          tool: cross
 
       - name: Build Android arm64-v8a
         run: cross build --target aarch64-linux-android --release
