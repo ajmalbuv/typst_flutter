@@ -128,7 +128,7 @@ class TypstCompiler implements Finalizable {
   Future<String> query({
     required TypstDocument document,
     required String selector,
-  }) async => _engine.query(document: document.inner, selector: selector);
+  }) async => await _engine.query(document: document.inner, selector: selector);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
