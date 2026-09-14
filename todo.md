@@ -16,7 +16,7 @@ This document tracks completed milestones and upcoming features for full feature
 
 ## 🟡 P2: Performance & Optimization
 
-- [ ] **Incremental Compilation Cache**:
+- [x] **Incremental Compilation Cache**:
   - Implement `Source::edit` and memoization caching via `comemo` to reuse the existing `SimpleWorld` across compilations.
   - Sub-30ms rebuild times during active typing / live editing in Flutter apps.
 - [ ] **Persistent Disk Cache for Packages**:

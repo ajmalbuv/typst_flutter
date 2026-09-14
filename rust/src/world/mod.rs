@@ -76,8 +76,14 @@ impl VirtualFileSystem {
     }
 
     /// Replaces project files, skipping byte-identical entries to preserve downstream cache.
-    pub(crate) fn set_files(&mut self, virtual_files: Vec<VirtualFile>) {
+    /// Returns `(changed_or_added_paths, removed_paths)`.
+    pub(crate) fn set_files(
+        &mut self,
+        virtual_files: Vec<VirtualFile>,
+    ) -> (Vec<String>, Vec<String>) {
         let mut new_keys = std::collections::HashSet::new();
+        let mut changed_or_added = Vec::new();
+
         for vf in virtual_files {
             let normalised = vf.path.replace('\\', "/");
             new_keys.insert(normalised.clone());
@@ -90,9 +96,21 @@ impl VirtualFileSystem {
             {
                 continue;
             }
+            changed_or_added.push(normalised.clone());
             self.files.insert(normalised, new_bytes);
         }
-        self.files.retain(|k, _| new_keys.contains(k));
+
+        let mut removed = Vec::new();
+        self.files.retain(|k, _| {
+            if new_keys.contains(k) {
+                true
+            } else {
+                removed.push(k.clone());
+                false
+            }
+        });
+
+        (changed_or_added, removed)
     }
 
     pub(crate) fn get(&self, path: &str) -> Option<&Bytes> {
@@ -119,16 +137,59 @@ impl VirtualFileSystem {
     }
 }
 
+/// Computes the minimal replacement range in `old` and the replacement substring from `new`.
+/// Guarantees that applying `old.edit(range, replacement)` produces `new`, and that all
+/// slice boundaries are valid UTF-8 character boundaries.
+pub(crate) fn compute_edit_range<'a>(old: &str, new: &'a str) -> (std::ops::Range<usize>, &'a str) {
+    if old == new {
+        return (0..0, "");
+    }
+
+    let mut prefix_bytes = old
+        .bytes()
+        .zip(new.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    while !old.is_char_boundary(prefix_bytes) {
+        prefix_bytes -= 1;
+    }
+
+    let old_rem = &old[prefix_bytes..];
+    let new_rem = &new[prefix_bytes..];
+
+    let mut suffix_bytes = old_rem
+        .bytes()
+        .rev()
+        .zip(new_rem.bytes().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    while suffix_bytes > 0
+        && (!old_rem.is_char_boundary(old_rem.len() - suffix_bytes)
+            || !new_rem.is_char_boundary(new_rem.len() - suffix_bytes))
+    {
+        suffix_bytes -= 1;
+    }
+
+    let old_end = old.len() - suffix_bytes;
+    let new_end = new.len() - suffix_bytes;
+
+    (prefix_bytes..old_end, &new[prefix_bytes..new_end])
+}
+
 // ── SimpleWorld ─────────────────────────────────────────────────────────────
 
-/// In-memory Typst World coordinator.
+/// In-memory Typst World coordinator with incremental compilation caching.
 pub(crate) struct SimpleWorld {
     pub(crate) library: LazyHash<Library>,
     pub(crate) font_manager: FontManager,
     pub(crate) source: Source,
     pub(crate) vfs: VirtualFileSystem,
     pub(crate) sys_time: Option<i64>,
+    pub(crate) inputs: Option<HashMap<String, String>>,
     pub(crate) package_resolver: PackageResolver,
+    pub(crate) sources: std::sync::RwLock<HashMap<FileId, Source>>,
 }
 
 impl SimpleWorld {
@@ -145,7 +206,9 @@ impl SimpleWorld {
             ),
             vfs: VirtualFileSystem::new(),
             sys_time: None,
+            inputs: None,
             package_resolver: PackageResolver::new(),
+            sources: std::sync::RwLock::new(HashMap::new()),
         }
     }
 
@@ -157,14 +220,47 @@ impl SimpleWorld {
         self.font_manager.add_fonts(font_data);
     }
 
+    /// Incrementally updates the main source document using `Source::edit`.
     pub(crate) fn set_markup(&mut self, markup: String) {
-        if self.source.text() != markup {
-            self.source = Source::new(self.source.id(), markup);
+        if self.source.text() == markup {
+            return;
         }
+        let (range, replacement) = compute_edit_range(self.source.text(), &markup);
+        self.source.edit(range, replacement);
     }
 
+    /// Updates virtual project files and keeps the parsed secondary source cache synchronized.
     pub(crate) fn set_files(&mut self, virtual_files: Vec<VirtualFile>) {
-        self.vfs.set_files(virtual_files);
+        let (changed, removed) = self.vfs.set_files(virtual_files);
+        if !changed.is_empty() || !removed.is_empty() {
+            let mut sources_guard = self.sources.write().unwrap();
+            for path in removed {
+                if let Ok(vpath) = VirtualPath::new(&path) {
+                    let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
+                    sources_guard.remove(&id);
+                }
+            }
+            for path in changed {
+                if let Ok(vpath) = VirtualPath::new(&path) {
+                    let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
+                    if let Some(bytes) = self.vfs.get(&path) {
+                        if let Ok(text) = std::str::from_utf8(bytes) {
+                            if let Some(existing_source) = sources_guard.get_mut(&id) {
+                                if existing_source.text() != text {
+                                    let (range, replacement) =
+                                        compute_edit_range(existing_source.text(), text);
+                                    existing_source.edit(range, replacement);
+                                }
+                            } else {
+                                sources_guard.insert(id, Source::new(id, text.to_string()));
+                            }
+                        } else {
+                            sources_guard.remove(&id);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub(crate) fn set_sys_time(&mut self, sys_time: Option<i64>) {
@@ -172,13 +268,16 @@ impl SimpleWorld {
     }
 
     pub(crate) fn set_inputs(&mut self, inputs: Option<HashMap<String, String>>) {
-        let mut dict = Dict::new();
-        if let Some(map) = inputs {
-            for (k, v) in map {
-                dict.insert(k.into(), v.into_value());
+        if self.inputs != inputs {
+            self.inputs = inputs.clone();
+            let mut dict = Dict::new();
+            if let Some(map) = inputs {
+                for (k, v) in map {
+                    dict.insert(k.into(), v.into_value());
+                }
             }
+            self.library = LazyHash::new(Library::builder().with_inputs(dict).build());
         }
-        self.library = LazyHash::new(Library::builder().with_inputs(dict).build());
     }
 
     pub(crate) fn pre_resolve_packages(&mut self) -> Result<(), TypstCompileError> {
@@ -208,27 +307,40 @@ impl typst::World for SimpleWorld {
             return Ok(self.source.clone());
         }
 
-        match id.root() {
+        // Fast path: check the cached sources.
+        {
+            let sources_guard = self.sources.read().unwrap();
+            if let Some(src) = sources_guard.get(&id) {
+                return Ok(src.clone());
+            }
+        }
+
+        // Cache miss: resolve bytes, parse into Source, and cache it.
+        let text = match id.root() {
             VirtualRoot::Project => {
                 let vpath = id.vpath();
                 let key = vpath.get_without_slash().replace('\\', "/");
                 match self.vfs.get(&key) {
-                    Some(bytes) => {
-                        let text =
-                            std::str::from_utf8(bytes).map_err(|_| FileError::InvalidUtf8)?;
-                        Ok(Source::new(id, text.to_string()))
-                    }
-                    None => Err(FileError::NotFound(vpath.get_without_slash().into())),
+                    Some(bytes) => std::str::from_utf8(bytes)
+                        .map_err(|_| FileError::InvalidUtf8)?
+                        .to_string(),
+                    None => return Err(FileError::NotFound(vpath.get_without_slash().into())),
                 }
             }
             VirtualRoot::Package(spec) => {
                 let bytes = self
                     .package_resolver
                     .resolve_package_file(spec, id.vpath())?;
-                let text = std::str::from_utf8(&bytes).map_err(|_| FileError::InvalidUtf8)?;
-                Ok(Source::new(id, text.to_string()))
+                std::str::from_utf8(&bytes)
+                    .map_err(|_| FileError::InvalidUtf8)?
+                    .to_string()
             }
-        }
+        };
+
+        let new_source = Source::new(id, text);
+        let mut sources_guard = self.sources.write().unwrap();
+        sources_guard.insert(id, new_source.clone());
+        Ok(new_source)
     }
 
     fn font(&self, index: usize) -> Option<Font> {
@@ -504,5 +616,121 @@ mod tests {
         map.insert("author".to_string(), "Alice".to_string());
         world.set_inputs(Some(map));
         let _ = world.library();
+    }
+
+    #[test]
+    fn test_compute_edit_range_edge_cases() {
+        // Identical
+        assert_eq!(compute_edit_range("hello", "hello"), (0..0, ""));
+        assert_eq!(compute_edit_range("", ""), (0..0, ""));
+
+        // Insertions
+        assert_eq!(compute_edit_range("", "a"), (0..0, "a"));
+        assert_eq!(compute_edit_range("hello", "hello world"), (5..5, " world"));
+        assert_eq!(compute_edit_range("world", "hello world"), (0..0, "hello "));
+        assert_eq!(compute_edit_range("ac", "abc"), (1..1, "b"));
+
+        // Deletions
+        assert_eq!(compute_edit_range("a", ""), (0..1, ""));
+        assert_eq!(compute_edit_range("hello world", "hello"), (5..11, ""));
+        assert_eq!(compute_edit_range("hello world", "world"), (0..6, ""));
+        assert_eq!(compute_edit_range("abc", "ac"), (1..2, ""));
+
+        // Replacements
+        assert_eq!(compute_edit_range("foo", "bar"), (0..3, "bar"));
+        assert_eq!(
+            compute_edit_range("The quick brown fox", "The fast brown fox"),
+            (4..9, "fast")
+        );
+
+        // Multi-byte UTF-8 emoji
+        let old = "hello 🦀 world";
+        let new = "hello 🦞 world";
+        let (range, rep) = compute_edit_range(old, new);
+        assert_eq!(rep, "🦞");
+        let mut s = old.to_string();
+        s.replace_range(range, rep);
+        assert_eq!(s, new);
+
+        // UTF-8 multi-byte insertion/deletion
+        let old_c = "café";
+        let new_c = "cafeteria";
+        let (range_c, rep_c) = compute_edit_range(old_c, new_c);
+        let mut sc = old_c.to_string();
+        sc.replace_range(range_c, rep_c);
+        assert_eq!(sc, new_c);
+    }
+
+    #[test]
+    fn test_incremental_set_markup() {
+        let mut world = SimpleWorld::new();
+        assert_eq!(world.source.text(), "");
+
+        // Step 1: Initial markup
+        world.set_markup("= Hello Typst\nThis is a test.".to_string());
+        assert_eq!(world.source.text(), "= Hello Typst\nThis is a test.");
+
+        // Step 2: Typing a character
+        world.set_markup("= Hello Typst!\nThis is a test.".to_string());
+        assert_eq!(world.source.text(), "= Hello Typst!\nThis is a test.");
+
+        // Step 3: Deleting words
+        world.set_markup("= Hello Typst!\nThis is.".to_string());
+        assert_eq!(world.source.text(), "= Hello Typst!\nThis is.");
+
+        // Step 4: Identical markup is no-op
+        world.set_markup("= Hello Typst!\nThis is.".to_string());
+        assert_eq!(world.source.text(), "= Hello Typst!\nThis is.");
+    }
+
+    #[test]
+    fn test_incremental_secondary_source_caching() {
+        let mut world = SimpleWorld::new();
+        let file_path = "sub/helper.typ";
+        world.set_files(vec![VirtualFile {
+            path: file_path.to_string(),
+            bytes: b"= Helper Section".to_vec(),
+        }]);
+
+        let id = FileId::new(RootedPath::new(
+            VirtualRoot::Project,
+            VirtualPath::new(file_path).unwrap(),
+        ));
+
+        // First read: parsed and cached
+        let src1 = world.source(id).unwrap();
+        assert_eq!(src1.text(), "= Helper Section");
+
+        // Second read: retrieved from cache
+        let src2 = world.source(id).unwrap();
+        assert_eq!(src2.text(), "= Helper Section");
+
+        // File updated: edits secondary source
+        world.set_files(vec![VirtualFile {
+            path: file_path.to_string(),
+            bytes: b"= Helper Section Updated".to_vec(),
+        }]);
+        let src3 = world.source(id).unwrap();
+        assert_eq!(src3.text(), "= Helper Section Updated");
+
+        // File removed: removed from cache
+        world.set_files(vec![]);
+        assert!(world.source(id).is_err());
+    }
+
+    #[test]
+    fn test_incremental_compilation_roundtrip() {
+        use typst_layout::PagedDocument;
+
+        let mut world = SimpleWorld::new();
+        world.set_markup("= Title\nFirst paragraph.".to_string());
+
+        let doc1 = typst::compile::<PagedDocument>(&world).output.unwrap();
+        assert_eq!(doc1.pages().len(), 1);
+
+        // Incremental keystroke
+        world.set_markup("= Title\nFirst paragraph with more text.".to_string());
+        let doc2 = typst::compile::<PagedDocument>(&world).output.unwrap();
+        assert_eq!(doc2.pages().len(), 1);
     }
 }
