@@ -12,7 +12,7 @@ Before tagging, ensure the version number in `pubspec.yaml` is updated to the ne
 
 ```yaml
 # pubspec.yaml
-version: 0.1.0 # <-- Update this
+version: 3.0.0 # <-- Update this
 ```
 
 ### 2. Create and Push a Git Tag
@@ -20,9 +20,9 @@ version: 0.1.0 # <-- Update this
 Once the `main` branch is ready for release and the version is bumped:
 
 ```bash
-# Example for version 0.1.0
-git tag v0.1.0
-git push origin v0.1.0
+# Example for version 3.0.0
+git tag v3.0.0
+git push origin v3.0.0
 ```
 
 ### 3. CI Pipeline Execution

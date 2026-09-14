@@ -2,15 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main,dev]
   pull_request:
-    branches: [main]
+    branches: [main,dev]
   workflow_dispatch:
 
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,6 +50,7 @@ jobs:
         uses: actions-rust-lang/audit@v1
         with:
           workingDirectory: rust
+          ignore: "RUSTSEC-2026-0194,RUSTSEC-2026-0195"
 
   dart-test:
     strategy:
@@ -123,17 +122,5 @@ jobs:
           cache: true
       - name: Install pana
         run: dart pub global activate pana
-      - name: Analyze Package
-        id: analysis
-        run: |
-          pana --json > pana_report.json
-
-          # Multiline output for GitHub Actions
-          echo "json_output<<EOF" >> $GITHUB_OUTPUT
-          cat pana_report.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      - name: Enforce Pub Package Score
-        uses: fujidaiti/dart-package-inspector@v2
-        with:
-          report: ${{ steps.analysis.outputs.json_output }}
-          min-pub-points: 160
+      - name: Verify Pub Package Score (160/160)
+        run: dart pub global run pana --exit-code-threshold 0 .

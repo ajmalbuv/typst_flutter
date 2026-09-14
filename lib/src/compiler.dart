@@ -87,11 +87,17 @@ class TypstCompiler implements Finalizable {
   ///
   /// Returns a [TypstDocument] which can be used to query page dimensions,
   /// lazily render raster/SVG pages, or export the full document to PDF.
+  ///
+  /// [allowPackages] controls whether packages referenced via
+  /// `#import "@preview/..."` will be automatically downloaded from
+  /// `packages.typst.org` and cached in memory. Defaults to `true`.
+  /// Set to `false` for offline-only compilation or to prevent network access.
   Future<TypstDocument> compile({
     required String source,
     FileSource? files,
     DateTime? date,
     Map<String, String>? inputs,
+    bool allowPackages = true,
   }) async {
     final virtualFiles = await _buildVirtualFiles(files);
     try {
@@ -100,6 +106,7 @@ class TypstCompiler implements Finalizable {
         files: virtualFiles,
         sysTime: _dateTimeToSysTime(date),
         inputs: inputs,
+        allowPackages: allowPackages,
       );
       return TypstDocument.fromInner(inner);
     } on api.TypstCompileError catch (e) {

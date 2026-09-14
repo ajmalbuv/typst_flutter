@@ -10,19 +10,23 @@ env:
   VERSION: ${{ github.ref_name }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # ── Android (all 4 ABIs) ───────────────────────────────────────────────────
   build-android:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross.git
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: "version"
 
       - name: Build Android arm64-v8a
         run: cross build --target aarch64-linux-android --release
@@ -66,6 +70,8 @@ jobs:
   # ── iOS (fat static lib: device arm64 + sim arm64 + sim x86_64) ──────────
   build-ios:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -120,6 +126,8 @@ jobs:
   # ── Linux x86_64 ──────────────────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -149,6 +157,8 @@ jobs:
   # ── Windows x86_64 ────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -178,6 +188,8 @@ jobs:
   # ── macOS universal (arm64 + x86_64) ────────────────────────────────────
   build-macos:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -220,6 +232,8 @@ jobs:
   generate-checksums:
     needs: [build-android, build-ios, build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v7
         with:

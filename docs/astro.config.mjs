@@ -5,6 +5,11 @@ import { defineConfig } from 'astro/config';
 export default defineConfig({
   site: 'https://ajmalbuv.github.io',
   base: '/typst_flutter',
+  build: {
+    assets: 'assets',
+    inlineStylesheets: 'always',
+  },
+  output: 'static',
   integrations: [
     starlight({
       title: 'typst_flutter',

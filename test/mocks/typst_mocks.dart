@@ -82,6 +82,7 @@ class FakeTypstEngine extends Fake implements api.TypstEngine {
     required List<api.VirtualFile> files,
     PlatformInt64? sysTime,
     Map<String, String>? inputs,
+    bool allowPackages = true,
   }) async {
     if (markup == 'error') {
       throw const api.TypstCompileError(

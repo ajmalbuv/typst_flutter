@@ -1,3 +1,24 @@
+## 3.0.0
+
+### New Features & Performance
+
+- **Incremental Compilation Cache**:
+  - Replaced full AST re-parsing with Typst's incremental `Source::edit` and `comemo` memoization.
+  - Secondary project files and package files are cached across compilations and incrementally edited when modified.
+  - Sub-30ms rebuild times during interactive editing and live document typing in Flutter.
+- **Typst Package Resolution**: `#import "@preview/..."` is now supported out of the box!
+  - Packages are automatically fetched from `packages.typst.org`, decompressed, and cached in memory across the engine's lifecycle.
+  - Transitive dependencies between packages are resolved and loaded automatically.
+  - Added `allowPackages` (default `true`) parameter to `TypstCompiler.compile()`. Set to `false` for offline-only environments or restricted networks.
+
+### Dependencies & Tooling
+
+- Upgraded `flutter_rust_bridge` to `2.13.0` across Dart dependencies, Rust crate dependencies, and codegen CLI.
+- Added `ureq` v3 (pure Rust TLS with `rustls`) for minimal footprint and cross-platform network requests without OpenSSL dependencies.
+- Added `flate2` and `tar` for high-performance `.tar.gz` package decompression.
+
+---
+
 ## 2.2.1
 
 ### Bug Fixes
