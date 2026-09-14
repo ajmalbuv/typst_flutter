@@ -241,23 +241,20 @@ impl SimpleWorld {
                 }
             }
             for path in changed {
-                if let Ok(vpath) = VirtualPath::new(&path) {
-                    let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
-                    if let Some(bytes) = self.vfs.get(&path) {
-                        if let Ok(text) = std::str::from_utf8(bytes) {
-                            if let Some(existing_source) = sources_guard.get_mut(&id) {
-                                if existing_source.text() != text {
-                                    let (range, replacement) =
-                                        compute_edit_range(existing_source.text(), text);
-                                    existing_source.edit(range, replacement);
-                                }
-                            } else {
-                                sources_guard.insert(id, Source::new(id, text.to_string()));
-                            }
-                        } else {
-                            sources_guard.remove(&id);
-                        }
+                let Ok(vpath) = VirtualPath::new(&path) else {
+                    continue;
+                };
+                let id = FileId::new(RootedPath::new(VirtualRoot::Project, vpath));
+                let bytes = self.vfs.get(&path).unwrap();
+                if let Ok(text) = std::str::from_utf8(bytes) {
+                    if let Some(existing_source) = sources_guard.get_mut(&id) {
+                        let (range, replacement) = compute_edit_range(existing_source.text(), text);
+                        existing_source.edit(range, replacement);
+                    } else {
+                        sources_guard.insert(id, Source::new(id, text.to_string()));
                     }
+                } else {
+                    sources_guard.remove(&id);
                 }
             }
         }
@@ -396,10 +393,16 @@ mod tests {
     #[test]
     fn test_vfs_normalization() {
         let mut world = SimpleWorld::new();
-        let files = vec![VirtualFile {
-            path: "subdir\\test.typ".to_string(),
-            bytes: b"= Test".to_vec(),
-        }];
+        let files = vec![
+            VirtualFile {
+                path: "subdir\\test.typ".to_string(),
+                bytes: b"= Test".to_vec(),
+            },
+            VirtualFile {
+                path: "../escape.typ".to_string(),
+                bytes: b"invalid".to_vec(),
+            },
+        ];
         world.set_files(files);
         // Backslashes should be normalized to forward slashes
         assert!(world.vfs.contains("subdir/test.typ"));
@@ -407,6 +410,8 @@ mod tests {
             world.vfs.get("subdir/test.typ").unwrap().as_slice(),
             b"= Test"
         );
+        // Remove files including the invalid path
+        world.set_files(vec![]);
     }
 
     #[test]
@@ -459,6 +464,11 @@ mod tests {
         // test source()
         let source_inc = world.source(inc_id).unwrap();
         assert_eq!(source_inc.text(), "Hello");
+
+        // Clear sources cache to test on-demand lazy parsing fallback from VFS
+        world.sources.write().unwrap().clear();
+        let source_inc_uncached = world.source(inc_id).unwrap();
+        assert_eq!(source_inc_uncached.text(), "Hello");
 
         assert!(world.source(missing_id).is_err());
         assert!(world.source(bad_utf8_id).is_err());
@@ -616,6 +626,10 @@ mod tests {
         map.insert("author".to_string(), "Alice".to_string());
         world.set_inputs(Some(map));
         let _ = world.library();
+
+        // Reset inputs back to None
+        world.set_inputs(None);
+        let _ = world.library();
     }
 
     #[test]
@@ -659,6 +673,21 @@ mod tests {
         let mut sc = old_c.to_string();
         sc.replace_range(range_c, rep_c);
         assert_eq!(sc, new_c);
+
+        // Multi-byte boundary adjustment for suffix (e.g. \u{00E9} [0xC3, 0xA9] vs \u{00A9} [0xC2, 0xA9])
+        let old_s = "abc\u{00E9}";
+        let new_s = "def\u{00A9}";
+        let (range_s, rep_s) = compute_edit_range(old_s, new_s);
+        let mut s_res = old_s.to_string();
+        s_res.replace_range(range_s, rep_s);
+        assert_eq!(s_res, new_s);
+
+        let old_tail = "start\u{00E9}tail";
+        let new_tail = "begin\u{00A9}tail";
+        let (range_t, rep_t) = compute_edit_range(old_tail, new_tail);
+        let mut s_tail = old_tail.to_string();
+        s_tail.replace_range(range_t, rep_t);
+        assert_eq!(s_tail, new_tail);
     }
 
     #[test]
