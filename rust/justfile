@@ -7,8 +7,6 @@ set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 build:
     cargo build --release
 
-
-
 # Run rust tests
 test:
     cargo test
