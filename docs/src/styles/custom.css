@@ -26,13 +26,19 @@
   --sl-color-bg-sidebar: #dce0e8;
 
   --sl-color-text: #4c4f69;
-  --sl-color-text-accent: #8839ef;
+  /* Deepened Mauve to ensure WCAG AA contrast (>= 4.5:1) against light nav/sidebar backgrounds */
+  --sl-color-text-accent: #7b26c9;
 
-  --sl-color-accent: #8839ef;
-  --sl-color-accent-high: #ea76cb;
-  --sl-color-accent-low: #bcc0cc;
+  --sl-color-accent: #7b26c9;
+  --sl-color-accent-high: #581c87;
+  --sl-color-accent-low: #e8def8;
 
   --sl-color-hairline-shade: #ccd0da;
   --sl-color-black: #eff1f5;
   --sl-color-white: #4c4f69;
+}
+
+/* Ensure site title text has bold weight for optimal readability and accessibility */
+.site-title {
+  font-weight: 700;
 }
