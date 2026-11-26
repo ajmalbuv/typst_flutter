@@ -22,13 +22,16 @@ environment:
   sdk: ^3.11.0
 
 dependencies:
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
   flutter:
     sdk: flutter
+    
+  material_ui: any
   printing: ^5.14.3
   typst_flutter:
     path: ../
-
+    
+    
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -21,15 +21,16 @@ environment:
 dependencies:
   archive: ^4.0.0
   crypto: ^3.0.0
-  equatable: ^2.0.8
+  equatable: ^3.0.0
   flutter:
     sdk: flutter
+    
   flutter_rust_bridge: ^2.13.0
   flutter_svg: ^2.3.0
   http: ^1.2.0
+  material_ui: any
   meta: ^1.18.0
   path: ^1.9.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
